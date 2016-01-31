@@ -55,8 +55,8 @@ class DoctrineMatcher
             return !empty($value);
         });
 
-        $sort   = null;
-        $offset = null;
+        $sort   = array();
+        $offset = 0;
         $limit  = null;
 
         if (isset($fields['_sort'])) {
@@ -65,7 +65,7 @@ class DoctrineMatcher
         }
 
         if (isset($fields['_offset'])) {
-            $offset = $fields['_offset'];
+            $offset = (int)$fields['_offset'];
             unset($fields['_offset']);
         }
 
@@ -123,13 +123,20 @@ class DoctrineMatcher
             $callback($queryBuilder, $alias);
         }
 
-        $count = clone $queryBuilder;
-        $count = $count->select('count(' . $alias . '.id)')->getQuery()->getSingleScalarResult();
-        if ($offset < $count) {
-            $end = isset($limit) ? $offset + $limit : $count;
-            $end = $end > $count ? $count : $end;
-            header("Content-Range: items {$offset}-{$end}/{$count}");
-        }
+//        $countQueryBuilder = clone $queryBuilder;
+//        $count = $countQueryBuilder
+//            ->select('COUNT(' . $alias . ')')
+//            ->getQuery()
+//            ->getSingleScalarResult()
+//        ;
+//
+//        if ($offset < $count) {
+//            $end = isset($limit) ? $offset + $limit : $count;
+//            $end = $end > $count ? $count : $end;
+//            $contentRange = $offset-$end/$count;
+//
+//            header("Content-Range: items $contentRange");
+//        }
 
         $queryBuilder->setFirstResult($offset);
         $queryBuilder->setMaxResults($limit);
