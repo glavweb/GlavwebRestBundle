@@ -1,0 +1,11 @@
+services:
+    glavweb_rest.doctrine_matcher:
+        class: Glavweb\RestBundle\Service\DoctrineMatcher
+        arguments: [ @doctrine ]
+
+    glavweb_rest.form_action:
+        class: Glavweb\RestBundle\Action\RestFormAction
+        calls:
+            - [setDoctrine, [@doctrine]]
+            - [setSecurityContext, [@security.context]]
+            - [setFormFactory, [@form.factory]]
