@@ -8,6 +8,8 @@ use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Query\Expr\Comparison;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Class DoctrineMatcher
@@ -30,6 +32,26 @@ class DoctrineMatcher
     private $doctrine;
 
     /**
+     * @var array
+     */
+    private $orderings;
+
+    /**
+     * @var int
+     */
+    private $firstResult;
+
+    /**
+     * @var int
+     */
+    private $maxResults;
+
+    /**
+     * @var string
+     */
+    private $alias;
+
+    /**
      * DoctrineMatcher constructor.
      * @param Registry $doctrine
      */
@@ -39,40 +61,28 @@ class DoctrineMatcher
     }
 
     /**
-     * @param EntityRepository  $repository
-     * @param array             $fields
-     * @param callable|\Closure $callback
-     * @param string            $alias
-     * @return array
+     * @param EntityRepository $repository
+     * @param array            $fields
+     * @param array            $orderings
+     * @param int              $firstResult
+     * @param int              $maxResults
+     * @param string           $alias
+     * @return DoctrineMatcherResult
      * @throws \Doctrine\DBAL\DBALException
      */
-    public function matching(EntityRepository $repository, array $fields = array(), \Closure $callback = null, $alias = 't')
+    public function matching(EntityRepository $repository, array $fields = array(), array $orderings = null, $firstResult = 0, $maxResults = null, $alias = 't')
     {
+        $this->orderings   = $orderings;
+        $this->firstResult = $firstResult;
+        $this->maxResults  = $maxResults;
+        $this->alias       = $alias;
+
         /** @var ClassMetadata $classMetadata */
         $classMetadata = $this->doctrine->getManager()->getClassMetadata($repository->getClassName());
 
         $fields = array_filter($fields, function ($value) {
             return !empty($value);
         });
-
-        $sort   = array();
-        $offset = 0;
-        $limit  = null;
-
-        if (isset($fields['_sort'])) {
-            $sort = $fields['_sort'];
-            unset($fields['_sort']);
-        }
-
-        if (isset($fields['_offset'])) {
-            $offset = (int)$fields['_offset'];
-            unset($fields['_offset']);
-        }
-
-        if (isset($fields['_limit'])) {
-            $limit = $fields['_limit'];
-            unset($fields['_limit']);
-        }
 
         $queryBuilder = $repository->createQueryBuilder($alias);
         $expr = $queryBuilder->expr();
@@ -119,33 +129,41 @@ class DoctrineMatcher
             }
         }
 
-        if ($callback) {
-            $callback($queryBuilder, $alias);
-        }
+        $result = new DoctrineMatcherResult($queryBuilder, $orderings, $firstResult, $maxResults, $alias);
 
-//        $countQueryBuilder = clone $queryBuilder;
-//        $count = $countQueryBuilder
-//            ->select('COUNT(' . $alias . ')')
-//            ->getQuery()
-//            ->getSingleScalarResult()
-//        ;
-//
-//        if ($offset < $count) {
-//            $end = isset($limit) ? $offset + $limit : $count;
-//            $end = $end > $count ? $count : $end;
-//            $contentRange = $offset-$end/$count;
-//
-//            header("Content-Range: items $contentRange");
-//        }
+        return $result;
+    }
 
-        $queryBuilder->setFirstResult($offset);
-        $queryBuilder->setMaxResults($limit);
+    /**
+     * @return array
+     */
+    public function getOrderings()
+    {
+        return $this->orderings;
+    }
 
-        foreach ($sort as $fieldName => $order) {
-            $queryBuilder->addOrderBy($alias . '.' . $fieldName, $order);
-        }
+    /**
+     * @return int
+     */
+    public function getFirstResult()
+    {
+        return $this->firstResult;
+    }
 
-        return $queryBuilder->getQuery()->getResult();
+    /**
+     * @return int
+     */
+    public function getMaxResults()
+    {
+        return $this->maxResults;
+    }
+
+    /**
+     * @return string
+     */
+    public function getAlias()
+    {
+        return $this->alias;
     }
 
     /**
