@@ -6,6 +6,7 @@ use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Doctrine\ORM\Mapping\ClassMetadataInfo;
 use Doctrine\ORM\Query\Expr\Comparison;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -122,10 +123,22 @@ class DoctrineMatcher
                 }
 
             } elseif ($classMetadata->hasAssociation($field)) {
-                $className = $classMetadata->getAssociationTargetClass($field);
-                $entity = $this->getDoctrine()->getEntityManager()->find($className, $value);
+                $associationMapping = $classMetadata->getAssociationMapping($field);
+                $type               = $associationMapping['type'];
 
-                $queryBuilder->andWhere($expr->eq($alias . '.' . $field, $entity));
+                if ($type == ClassMetadataInfo::MANY_TO_MANY && !is_array($value)) {
+                    $queryBuilder
+                        ->andWhere($expr->isMemberOf(":$field", "$alias.$field"))
+                        ->setParameter($field,  $value)
+                    ;
+
+                } else {
+                    $className = $classMetadata->getAssociationTargetClass($field);
+                    $entity = $this->doctrine->getEntityManager()->find($className, $value);
+
+                    $queryBuilder->andWhere($expr->eq($alias . '.' . $field, $entity->getId()));
+                }
+
             }
         }
 

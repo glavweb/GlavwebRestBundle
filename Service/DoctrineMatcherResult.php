@@ -51,11 +51,11 @@ class DoctrineMatcherResult
      * @param string           $alias
      * @param string $alias
      */
-    public function __construct(QueryBuilder $queryBuilder, array $orderings = null, $firstResult = null, $maxResults = null, $alias = 't')
+    public function __construct(QueryBuilder $queryBuilder, array $orderings = null, $firstResult = 0, $maxResults = null, $alias = 't')
     {
         $this->queryBuilder = $queryBuilder;
-        $this->orderings   = $orderings;
-        $this->firstResult = $firstResult;
+        $this->orderings   = (array)$orderings;
+        $this->firstResult = (int)$firstResult;
         $this->maxResults  = $maxResults;
         $this->alias       = $alias;
     }
@@ -63,7 +63,7 @@ class DoctrineMatcherResult
     /**
      * @return array
      */
-    public function getResult()
+    public function getList()
     {
         $queryBuilder = $this->getQueryBuilder();
         $alias        = $this->getAlias();
@@ -92,7 +92,7 @@ class DoctrineMatcherResult
         $total = $totalQueryBuilder
             ->select('COUNT(' . $alias . ')')
             ->getQuery()
-            ->getSingleScalarResult()
+            ->getScalarResult()
         ;
 
         return $total;

@@ -2,9 +2,15 @@
 
 namespace Glavweb\RestBundle\Controller;
 
+use Doctrine\ORM\EntityRepository;
 use FOS\RestBundle\Controller\FOSRestController;
 use FOS\RestBundle\Request\ParamFetcherInterface;
 use FOS\RestBundle\View\View;
+use Glavweb\RestBundle\Service\DoctrineMatcherResult;
+use JMS\Serializer\Exclusion\GroupsExclusionStrategy;
+use JMS\Serializer\SerializationContext;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Class GlavwebRestController
@@ -13,59 +19,91 @@ use FOS\RestBundle\View\View;
 class GlavwebRestController extends FOSRestController
 {
     /**
-     * @param ParamFetcherInterface $paramFetcher
-     * @return array
-     */
-    protected function getSystemParameters(ParamFetcherInterface $paramFetcher)
-    {
-        $scopes  = array_map('trim', explode(',', $paramFetcher->get('_scope')));
-        $sort    = $paramFetcher->get('_sort');
-        $limit   = $paramFetcher->get('_limit');
-        $offset  = $paramFetcher->get('_offset');
-
-        return array($scopes, $sort, $limit, $offset);
-    }
-
-    /**
      * @param View $view
-     * @param $offset
-     * @param $limit
-     * @param $total
+     * @param int $offset
+     * @param int $limit
+     * @param int $total
      */
     protected function setContentRangeHeader(View $view, $offset, $limit, $total)
     {
-        if ($offset < $total) {
-            $end = isset($limit) ? $offset + $limit : $total;
+        $offset = (int)$offset;
+        $limit  = (int)$limit;
+        $total  = (int)$total;
+
+        if ($limit > 0 && $total > 0 && $offset < $total) {
+            $end = $offset + $limit;
             $end = $end > $total ? $total : $end;
 
-            $view->setHeader('Content-Range', "items $offset-$end/$total");
-        }
-    }
-
-    /**
-     * @param ParamFetcherInterface $paramFetcher
-     * @return array
-     */
-    protected function getFields(ParamFetcherInterface $paramFetcher)
-    {
-        $fields = $paramFetcher->all();
-        $fields = $this->removeSystemParameters($fields);
-
-        return $fields;
-    }
-
-    /**
-     * @param array $fields
-     * @return array
-     */
-    private function removeSystemParameters(array $fields)
-    {
-        foreach ($fields as $fieldName => $fieldValue) {
-            if (strpos($fieldName, '_') === 0) {
-                unset($fields[$fieldName]);
+            if ($end < $total) {
+                $view->setStatusCode(Response::HTTP_PARTIAL_CONTENT);
+                $view->setHeader('Content-Range', "items $offset-$end/$total");
             }
         }
+    }
 
-        return $fields;
+    /**
+     * @param Request $request
+     * @param string $paramName
+     * @return array
+     */
+    protected function getScopesByRequest(Request $request, $paramName = '_scope')
+    {
+        $scopes = array_map('trim', explode(',', $request->get($paramName)));
+        $scopes = array_merge($scopes, [GroupsExclusionStrategy::DEFAULT_GROUP]);
+
+        return $scopes;
+    }
+
+    /**
+     * @param Request $request
+     * @param bool $enableMaxDepthChecks
+     * @return SerializationContext
+     */
+    protected function getSerializationContext(Request $request, $enableMaxDepthChecks = true)
+    {
+        $scopes = $this->getScopesByRequest($request);
+
+        $serializationContext = SerializationContext::create()
+            ->setGroups(array_merge($scopes, [GroupsExclusionStrategy::DEFAULT_GROUP]))
+        ;
+
+        if ($enableMaxDepthChecks) {
+            $serializationContext->enableMaxDepthChecks();
+        }
+
+        return $serializationContext;
+    }
+
+    /**
+     * @param DoctrineMatcherResult $matcherResult
+     * @param SerializationContext $serializationContext
+     * @return \FOS\RestBundle\View\View
+     */
+    protected function createViewByMatcher(DoctrineMatcherResult $matcherResult, SerializationContext $serializationContext, $statusCode = null, array $headers = array())
+    {
+        $offset = $matcherResult->getFirstResult();
+        $limit  = $matcherResult->getMaxResults();
+
+        $view = $this->view($matcherResult->getList(), $statusCode, $headers);
+        $this->setContentRangeHeader($view, $offset, $limit, $matcherResult->getTotal());
+
+        return $view
+            ->setSerializationContext($serializationContext)
+        ;
+    }
+
+    /**
+     * @param string $class
+     * @return EntityRepository
+     */
+    protected function getRepository($class)
+    {
+        $repository = $this->getDoctrine()->getManager()->getRepository($class);
+
+        if ($repository instanceof EntityRepository) {
+            return $repository;
+        }
+
+        throw new \RuntimeException('Repository class must be instance of EntityRepository.');
     }
 }
