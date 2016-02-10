@@ -2,8 +2,10 @@
 
 namespace Glavweb\RestBundle\Test;
 
+use Faker\Provider\Image;
 use Liip\FunctionalTestBundle\Test\WebTestCase;
 use Symfony\Bundle\FrameworkBundle\Client;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -133,6 +135,46 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
+     * @param Response $response
+     * @param array $expectedData
+     * @return bool
+     */
+    protected function findInJsonResponse(Response $response, array $expectedData = array())
+    {
+        $actualJson = $response->getContent();
+
+        $actualData = json_decode($actualJson, true);
+        foreach ($actualData as $actualItem) {
+            if ($this->findDataInItem($actualItem, $expectedData)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param $actualItem
+     * @param $expectedData
+     * @return bool
+     */
+    private function findDataInItem($actualItem, $expectedData)
+    {
+        foreach ($expectedData as $expectedItemName => $expectedItemValue) {
+            $isExist =
+                isset($actualItem[$expectedItemName]) &&
+                $actualItem[$expectedItemName] == $expectedItemValue
+            ;
+
+            if (!$isExist) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Asserts that the HTTP response code of the last request performed by
      * $client matches the expected code. If not, raises an error with more
      * information.
@@ -237,6 +279,21 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
+     * @param int $width
+     * @param int $height
+     * @return UploadedFile
+     */
+    protected function getFakeUploadedImage($width = 64, $height = 64)
+    {
+        $rootDir = $this->getContainer()->getParameter('kernel.root_dir');
+        $filePath = Image::image($rootDir . '/cache', $width, $height, null);
+        $fileName = basename($filePath);
+        $file = new UploadedFile($filePath, $fileName);
+
+        return $file;
+    }
+
+    /**
      * @param string $url
      * @param array $data
      */
@@ -248,19 +305,21 @@ abstract class RestTestCase extends WebTestCase
     /**
      * @param string $url
      * @param array $data
+     * @param array $files
      */
-    protected function createRequest($url, array $data = [])
+    protected function createRequest($url, array $data = [], array $files = [])
     {
-        $this->restRequest('POST', $url, $data);
+        $this->restRequest('POST', $url, $data, $files);
     }
 
     /**
      * @param string $url
      * @param array $data
+     * @param array $files
      */
-    protected function updateRequest($url, array $data = [])
+    protected function updateRequest($url, array $data = [], array $files = [])
     {
-        $this->restRequest('PUT', $url, $data);
+        $this->restRequest('PUT', $url, $data, $files);
     }
 
     /**
@@ -273,16 +332,36 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
-     * @param string $method
      * @param string $url
      * @param array $data
      */
-    protected function restRequest($method, $url, array $data)
+    protected function linkRequest($url, array $data = [])
+    {
+        $this->restRequest('LINK', $url, $data);
+    }
+
+    /**
+     * @param string $url
+     * @param array $data
+     */
+    protected function unlinkRequest($url, array $data = [])
+    {
+        $this->restRequest('UNLINK', $url, $data);
+    }
+
+    /**
+     * @param string $method
+     * @param string $url
+     * @param array $data
+     * @param array $files
+     */
+    protected function restRequest($method, $url, array $data, array $files = [])
     {
         $this->client->request($method, $url,
             $data,
-            [],
+            $files,
             array_merge($this->authenticateResponse, [
+//                'Content-Type' => 'multipart/form-data',
                 'HTTP_ACCEPT' => 'application/json',
             ])
         );
