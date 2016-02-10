@@ -104,7 +104,7 @@ class DoctrineMatcher
                         $operator = Comparison::EQ;
                     }
 
-                    $value = preg_replace('/[^a-zA-Z0-9]+/', '', $value);
+                    $value = preg_replace('/[^a-zA-Z0-9_]+/', '', $value);
                 }
 
                 if (!$operator) {
@@ -134,11 +134,10 @@ class DoctrineMatcher
 
                 } else {
                     $className = $classMetadata->getAssociationTargetClass($field);
-                    $entity = $this->doctrine->getEntityManager()->find($className, $value);
+                    $entity = $this->doctrine->getManager()->find($className, $value);
 
                     $queryBuilder->andWhere($expr->eq($alias . '.' . $field, $entity->getId()));
                 }
-
             }
         }
 
