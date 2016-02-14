@@ -2,13 +2,16 @@
 
 namespace Glavweb\RestBundle\Action;
 
+use AppBundle\Form\Project\ApiUploadedFile;
 use Doctrine\ORM\PersistentCollection;
 use FOS\RestBundle\View\View;
 use Glavweb\ActionBundle\Action\ParameterBag;
 use Glavweb\ActionBundle\Action\Response;
 use Glavweb\ActionBundle\Action\StandardAction;
+use JMS\Serializer\SerializationContext;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Form;
+use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
@@ -26,16 +29,19 @@ class RestFormAction extends StandardAction
      * @var array
      */
     protected $parameterRules = array(
-        'request'          => '\Symfony\Component\HttpFoundation\Request',
-        'formType'         => '\Symfony\Component\Form\AbstractType',
-        'entity'           => ':object',
-        'cleanForm'        => ':bool|:null',
-        'formOptions'      => ':array|:null',
-        'onPreValidation'  => '\Closure|:null',
-        'onPostValidation' => '\Closure|:null',
-        'onPostPersist'    => '\Closure|:null',
-        'onSuccess'        => '\Closure|:null',
-        'onFailure'        => '\Closure|:null'
+        'request'              => '\Symfony\Component\HttpFoundation\Request',
+        'formType'             => '\Symfony\Component\Form\AbstractType',
+        'entity'               => ':object',
+        'cleanForm'            => ':bool|:null',
+        'cleanRequestData'     => ':bool|:null',
+        'getContent'           => ':bool|:null',
+        'formOptions'          => ':array|:null',
+        'serializationContext' => '\JMS\Serializer\SerializationContext|:null',
+        'onPreValidation'      => '\Closure|:null',
+        'onPostValidation'     => '\Closure|:null',
+        'onPostPersist'        => '\Closure|:null',
+        'onSuccess'            => '\Closure|:null',
+        'onFailure'            => '\Closure|:null'
     );
 
     /**
@@ -57,25 +63,40 @@ class RestFormAction extends StandardAction
         /** @var AbstractType $formType */
         /** @var object $entity */
         /** @var bool $cleanForm */
+        /** @var bool $cleanRequestData */
+        /** @var bool $getContent */
         /** @var array $formOptions */
+        /** @var SerializationContext $serializationContext */
         /** @var \Closure $onPreValidation */
         /** @var \Closure $onPostValidation */
         /** @var \Closure $onPostPersist */
         /** @var \Closure $onSuccess */
         /** @var \Closure $onFailure  */
-        $request          = $parameterBag->get('request');
-        $formType         = $parameterBag->get('formType');
-        $entity           = $parameterBag->get('entity');
-        $cleanForm        = $parameterBag->get('cleanForm');
-        $formOptions      = $parameterBag->get('formOptions', array());
-        $onPreValidation  = $parameterBag->get('onPreValidation');
-        $onPostValidation = $parameterBag->get('onPostValidation');
-        $onPostPersist    = $parameterBag->get('onPostPersist');
-        $onSuccess        = $parameterBag->get('onSuccess');
-        $onFailure        = $parameterBag->get('onFailure ');
+        $request              = $parameterBag->get('request');
+        $formType             = $parameterBag->get('formType');
+        $entity               = $parameterBag->get('entity');
+        $cleanForm            = $parameterBag->get('cleanForm');
+        $cleanRequestData     = $parameterBag->get('cleanRequestData', true);
+        $getContent           = $parameterBag->get('getContent');
+        $formOptions          = $parameterBag->get('formOptions', array());
+        $serializationContext = $parameterBag->get('serializationContext');
+        $onPreValidation      = $parameterBag->get('onPreValidation');
+        $onPostValidation     = $parameterBag->get('onPostValidation');
+        $onPostPersist        = $parameterBag->get('onPostPersist');
+        $onSuccess            = $parameterBag->get('onSuccess');
+        $onFailure            = $parameterBag->get('onFailure ');
 
         $view         = new View();
         $httpResponse = $view->getResponse();
+
+        $requestData = array_merge(
+            $request->request->all(),
+            $request->files->all()
+        );
+
+        if ($serializationContext) {
+            $view->setSerializationContext($serializationContext);
+        }
 
         $form = $this->getFormFactory()->createNamed(null, $formType, $entity,
             array_merge(
@@ -84,8 +105,12 @@ class RestFormAction extends StandardAction
             )
         );
 
+        if ($cleanRequestData) {
+            $requestData = $this->cleanRequestData($requestData, $form);
+        }
+
         if ($cleanForm) {
-            $this->cleanForm($request, $form);
+            $this->cleanForm($requestData, $form);
         }
 
         $this->prepareFormCollections($request, $form);
@@ -100,7 +125,7 @@ class RestFormAction extends StandardAction
             }
         }
 
-        $form->submit($request);
+        $form->submit($requestData);
 
         if ($form->isValid()) {
             if ($onPostValidation instanceof \Closure) {
@@ -128,8 +153,10 @@ class RestFormAction extends StandardAction
 
             $httpResponse->setStatusCode($statusCode);
             if ($isEditAction) {
-                $em->refresh($entity);
-                $view->setData($entity);
+                if ($getContent) {
+                    $em->refresh($entity);
+                    $view->setData($entity);
+                }
 
             } else {
                 $view->setData($entity->getId());
@@ -160,16 +187,14 @@ class RestFormAction extends StandardAction
     /**
      * Remove unnecessary fields from form
      *
-     * @param Request $request
+     * @param array $requestData
      * @param Form $form
      */
-    private function cleanForm(Request $request, Form $form)
+    private function cleanForm($requestData, Form $form)
     {
-        $allowedField = array_merge(
-            array_keys($request->request->all()),
-            array_keys($request->files->all())
-        );
+        $allowedField = array_keys($requestData);
 
+        /** @var FormInterface[] $formFields */
         $formFields = $form->all();
         foreach ($formFields as $formField) {
             $fieldName = $formField->getName();
@@ -241,5 +266,21 @@ class RestFormAction extends StandardAction
         }
 
         return $items;
+    }
+
+    /**
+     * @param array $requestData
+     * @param FormInterface $form
+     * @return array
+     */
+    private function cleanRequestData(array $requestData, FormInterface $form)
+    {
+        foreach ($requestData as $key => $value) {
+            if (!$form->has($key)) {
+                unset($requestData[$key]);
+            }
+        }
+
+        return $requestData;
     }
 }
