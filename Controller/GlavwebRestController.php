@@ -19,6 +19,27 @@ use Symfony\Component\HttpFoundation\Response;
 class GlavwebRestController extends FOSRestController
 {
     /**
+     * @param Request $request
+     * @param string  $key
+     * @return mixed
+     */
+    protected function getRestParam(Request $request, $key)
+    {
+        if (in_array($request->getMethod(), ['PUT', 'PATCH', 'POST'])) {
+            $default = $request->get($key);
+            $actual  = $request->request->get($key);
+
+            if ($actual === null) {
+                return $default;
+            }
+
+            return $actual;
+        }
+
+        return $request->get($key);
+    }
+
+    /**
      * @param View $view
      * @param int $offset
      * @param int $limit
@@ -48,7 +69,7 @@ class GlavwebRestController extends FOSRestController
      */
     protected function getScopesByRequest(Request $request, $paramName = '_scope')
     {
-        $scopes = array_map('trim', explode(',', $request->get($paramName)));
+        $scopes = array_map('trim', explode(',', $this->getRestParam($request, $paramName)));
         $scopes = array_merge($scopes, [GroupsExclusionStrategy::DEFAULT_GROUP]);
 
         return $scopes;
