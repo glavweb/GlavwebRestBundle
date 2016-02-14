@@ -29,8 +29,10 @@ abstract class RestTestCase extends WebTestCase
      */
     public function setUp()
     {
+        $environment = $this->getContainer()->get('kernel')->getEnvironment();
+
         $this->client = static::createClient(array(
-            'environment' => 'test',
+            'environment' => $environment,
             'debug'       => true,
         ));
     }
@@ -285,8 +287,31 @@ abstract class RestTestCase extends WebTestCase
      */
     protected function getFakeUploadedImage($width = 64, $height = 64)
     {
-        $rootDir = $this->getContainer()->getParameter('kernel.root_dir');
-        $filePath = Image::image($rootDir . '/cache', $width, $height, null);
+        $environment = $this->getContainer()->get('kernel')->getEnvironment();
+        $rootDir     = $this->getContainer()->getParameter('kernel.root_dir');
+        $filePath    = Image::image($rootDir . '/cache/' . $environment, $width, $height, null);
+        $fileName    = basename($filePath);
+        $file = new UploadedFile($filePath, $fileName);
+
+        return $file;
+    }
+
+    /**
+     * @param string $contentInsideFile
+     * @return UploadedFile
+     */
+    protected function getFakeUploadedPhpFile($contentInsideFile = 'PHP')
+    {
+        $environment = $this->getContainer()->get('kernel')->getEnvironment();
+        $rootDir     = $this->getContainer()->getParameter('kernel.root_dir');
+        $filePath    = $rootDir . '/cache/' . $environment . '/' . uniqid() . '.php';
+        $content     = '<?php echo "' . $contentInsideFile . '"; ';
+
+        $result = (bool)file_put_contents($filePath, $content);
+        if (!$result) {
+            throw new \RuntimeException("Can't create file: $filePath.");
+        }
+
         $fileName = basename($filePath);
         $file = new UploadedFile($filePath, $fileName);
 
@@ -365,5 +390,176 @@ abstract class RestTestCase extends WebTestCase
                 'HTTP_ACCEPT' => 'application/json',
             ])
         );
+    }
+
+
+    /**
+     * Takes a URI and converts it to absolute if it is not already absolute.
+     *
+     * @param string $uri A URI
+     * @return string An absolute URI
+     */
+    protected function getAbsoluteUri($uri)
+    {
+        // already absolute?
+        if (0 === strpos($uri, 'http://') || 0 === strpos($uri, 'https://')) {
+            return $uri;
+        }
+
+        $currentUri = sprintf('http%s://%s/',
+            $this->client->getServerParameter('HTTPS') ? 's' : '',
+            $this->client->getServerParameter('HTTP_HOST', 'localhost')
+        );
+
+        // protocol relative URL
+        if (0 === strpos($uri, '//')) {
+            return parse_url($currentUri, PHP_URL_SCHEME) . ':' . $uri;
+        }
+
+        // anchor?
+        if (!$uri || '#' == $uri[0]) {
+            return preg_replace('/#.*?$/', '', $currentUri) . $uri;
+        }
+
+        if ('/' !== $uri[0]) {
+            $path = parse_url($currentUri, PHP_URL_PATH);
+
+            if ('/' !== substr($path, -1)) {
+                $path = substr($path, 0, strrpos($path, '/') + 1);
+            }
+
+            $uri = $path . $uri;
+        }
+
+        return preg_replace('#^(.*?//[^/]+)\/.*$#', '$1', $currentUri) . $uri;
+    }
+
+    /**
+     * @param $url
+     * @return mixed
+     */
+    protected function getFileContent($url)
+    {
+        $url = $this->getAbsoluteUri($url);
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FAILONERROR, true);
+        curl_setopt($ch, CURLOPT_URL, $url);
+
+        $response = curl_exec($ch);
+        if (!$response) {
+            throw new \RuntimeException("Resource \"$url\" not found.");
+        }
+
+        $actualContent = curl_exec($ch);
+        curl_close($ch);
+
+        return $actualContent;
+    }
+
+    /**
+     * @param $url
+     * @return mixed
+     */
+    protected function getFileContentType($url)
+    {
+        $url = $this->getAbsoluteUri($url);
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_FAILONERROR, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_NOBODY, true);
+        curl_setopt($ch, CURLOPT_URL, $url);
+
+        $response = curl_exec($ch);
+        if (!$response) {
+            throw new \RuntimeException("Resource \"$url\" not found.");
+        }
+
+        $actualContentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
+
+        return $actualContentType;
+    }
+
+    /**
+     * @param $url
+     * @param $expectedStatusCode
+     * @param array $fields
+     */
+    protected function testUpdateImageSizes($url, $expectedStatusCode, array $fields)
+    {
+        foreach ($fields as $fieldName => $sizeSets) {
+            foreach ($sizeSets as $sizeSet) {
+                $width  = $sizeSet[0];
+                $height = $sizeSet[1];
+                $file   = $this->getFakeUploadedImage($width, $height);
+
+                $this->updateRequest($url, [], [$fieldName => $file]);
+                $this->assertStatusCode($expectedStatusCode, $this->client);
+            }
+        }
+    }
+
+    /**
+     * @param $url
+     * @param $expectedStatusCode
+     * @param array $executeFiles
+     */
+    protected function testUpdateExecuteFiles($url, $expectedStatusCode, array $executeFiles)
+    {
+        $this->updateRequest($url, [], $executeFiles);
+        $this->assertStatusCode($expectedStatusCode, $this->client);
+    }
+
+    /**
+     * @param $url
+     * @param $contentInsideFile
+     * @param $executeFiles
+     */
+    protected function testUpdateNotExecuteFiles($url, $contentInsideFile, $executeFiles)
+    {
+        foreach ($executeFiles as $fildName => $executeData) {
+            $this->updateRequest($url, [], [$fildName => $executeData['file']]);
+            $this->assertStatusCode(200, $this->client);
+
+            $this->queryRequest($url);
+            $this->assertStatusCode(200, $this->client);
+            $contentData = $this->getContentAsJson($this->client);
+
+            $fileUrl = $contentData[$executeData['property_field_name']];
+            $actualContent = $this->getFileContent($fileUrl);
+            $this->assertNotEquals($contentInsideFile, $actualContent);
+        }
+    }
+
+    /**
+     * @param Client $client
+     * @return mixed
+     */
+    protected function getContentAsJson(Client $client)
+    {
+        $content = $client->getResponse()->getContent();
+        $contentData = json_decode($content, true);
+
+        return $contentData;
+    }
+
+    /**
+     * @param $fields
+     */
+    protected function testUploadedImages($fields)
+    {
+        foreach ($fields as $filedName => $data) {
+            $actualContentType = $this->getFileContentType($data['url']);
+            $this->assertEquals($data['content_type'], $actualContentType);
+
+            $thumbnails = $data['thumbnails'];
+            foreach ($thumbnails as $thumbnailUrl) {
+                $actualContentType = $this->getFileContentType($thumbnailUrl);
+                $this->assertEquals($data['content_type'], $actualContentType);
+            }
+        }
     }
 }
