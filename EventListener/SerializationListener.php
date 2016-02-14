@@ -69,19 +69,14 @@ class SerializationListener implements EventSubscriberInterface
     static public function getSubscribedEvents()
     {
         return array(
-            array('event' => 'serializer.pre_serialize', 'method' => 'onPostSerializeProduct'),
+            array('event' => 'serializer.pre_serialize', 'method' => 'onPreSerializeFile'),
         );
     }
 
-    public function onPreSerialize(PreSerializeEvent $event)
-    {
-        // do something
-    }
-
     /**
-     * @param ObjectEvent $event
+     * @param PreSerializeEvent $event
      */
-    public function onPostSerializeProduct(ObjectEvent $event)
+    public function onPreSerializeFile(PreSerializeEvent $event)
     {
         $entity    = $event->getObject();
         $className = get_class($entity);
@@ -93,12 +88,11 @@ class SerializationListener implements EventSubscriberInterface
 
         $cacheKey = md5($className . '_' . $entity->getId());
         if (isset(self::$cache[$cacheKey])) {
-            return;
+//            return;
         }
         self::$cache[$cacheKey] = true;
 
         $uploadableFields = $this->metadataReader->getUploadableFields($className);
-
         foreach ($uploadableFields as $uploadableField) {
             $propertyName     = $uploadableField['propertyName'];
             $fileNameProperty = $uploadableField['fileNameProperty'];
