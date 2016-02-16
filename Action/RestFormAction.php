@@ -115,14 +115,19 @@ class RestFormAction extends StandardAction
 
         $this->prepareFormCollections($request, $form);
 
+        /**
+         * Pre validation
+         */
+        $this->onPreValidation($request, $form, $entity, $httpResponse);
+
         if ($onPreValidation instanceof \Closure) {
             $onPreValidation($request, $form, $entity, $httpResponse);
+        }
 
-            if ($httpResponse->getStatusCode() != HttpResponse::HTTP_OK) {
-                $response->response = $view;
+        if ($httpResponse->getStatusCode() != HttpResponse::HTTP_OK) {
+            $response->response = $view;
 
-                return true;
-            }
+            return true;
         }
 
         $form->submit($requestData);
@@ -181,7 +186,7 @@ class RestFormAction extends StandardAction
 
         $response->response = $form;
 
-        return true;
+        return false;
     }
 
     /**
@@ -219,6 +224,10 @@ class RestFormAction extends StandardAction
                 $collectionName = $formField->getName();
                 $requestData    = $request->request->get($collectionName);
 
+                if (!$requestData) {
+                    continue;
+                }
+
                 $newCollection = $this->getPreparedCollection($modelData, $requestData);
                 if ($newCollection) {
                     $request->request->set($collectionName, $newCollection);
@@ -230,7 +239,7 @@ class RestFormAction extends StandardAction
     /**
      * @param PersistentCollection $modelData
      * @param array                $requestData
-     * @return array|false
+     * @return array
      */
     private function getPreparedCollection(PersistentCollection $modelData, array $requestData)
     {
@@ -242,8 +251,6 @@ class RestFormAction extends StandardAction
 
         $items = [];
         $newItems = [];
-        $isBreak  = false;
-
         foreach ($requestData as $item) {
             $itemId = isset($item['id']) ? $item['id'] : null;
 
@@ -255,10 +262,6 @@ class RestFormAction extends StandardAction
             } else {
                 $newItems[] = $item;
             }
-        }
-
-        if ($isBreak) {
-            return false;
         }
 
         foreach ($newItems as $newItem) {
@@ -283,4 +286,13 @@ class RestFormAction extends StandardAction
 
         return $requestData;
     }
+
+    /**
+     * @param Request $request
+     * @param FormInterface $form
+     * @param $entity
+     * @param HttpResponse $httpResponse
+     */
+    protected function onPreValidation(Request $request, FormInterface $form, $entity, HttpResponse $httpResponse)
+    {}
 }
