@@ -13,10 +13,10 @@ use Vich\UploaderBundle\Metadata\MetadataReader;
 use Vich\UploaderBundle\Templating\Helper\UploaderHelper;
 
 /**
- * Class SerializationListener
- * @package AppBundle\EventListener
+ * Class AbstractSerializationListener
+ * @package Glavweb\RestBundle\EventListener
  */
-class SerializationListener implements EventSubscriberInterface
+abstract class AbstractSerializationListener implements EventSubscriberInterface
 {
     /**
      * @var array
@@ -42,6 +42,7 @@ class SerializationListener implements EventSubscriberInterface
      * @var MetadataReader
      */
     private $metadataReader;
+    
     /**
      * @var Reader
      */
@@ -56,21 +57,11 @@ class SerializationListener implements EventSubscriberInterface
      */
     public function __construct(UploaderHelper $uploaderHelper, MetadataReader $metadataReader, ImagineHelper $imagineHelper, Registry $doctrine, Reader $annotationsReader)
     {
-        $this->uploaderHelper = $uploaderHelper;
-        $this->imagineHelper  = $imagineHelper;
-        $this->metadataReader = $metadataReader;
-        $this->doctrine       = $doctrine;
+        $this->uploaderHelper    = $uploaderHelper;
+        $this->imagineHelper     = $imagineHelper;
+        $this->metadataReader    = $metadataReader;
+        $this->doctrine          = $doctrine;
         $this->annotationsReader = $annotationsReader;
-    }
-
-    /**
-     * @inheritdoc
-     */
-    static public function getSubscribedEvents()
-    {
-        return array(
-            array('event' => 'serializer.pre_serialize', 'method' => 'onPreSerializeFile'),
-        );
     }
 
     /**
@@ -79,7 +70,8 @@ class SerializationListener implements EventSubscriberInterface
     public function onPreSerializeFile(PreSerializeEvent $event)
     {
         $entity    = $event->getObject();
-        $className = get_class($entity);
+        $type      = $event->getType();
+        $className = $type['name'];
 
         $isUploadable = $this->metadataReader->isUploadable($className);
         if (!$isUploadable) {
@@ -88,7 +80,7 @@ class SerializationListener implements EventSubscriberInterface
 
         $cacheKey = md5($className . '_' . $entity->getId());
         if (isset(self::$cache[$cacheKey])) {
-//            return;
+            return;
         }
         self::$cache[$cacheKey] = true;
 
