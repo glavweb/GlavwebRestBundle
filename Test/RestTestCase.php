@@ -29,12 +29,14 @@ abstract class RestTestCase extends WebTestCase
      */
     public function setUp()
     {
-        $environment = $this->getContainer()->get('kernel')->getEnvironment();
+        $container = $this->getContainer();
+        $environment = $container->get('kernel')->getEnvironment();
+        $httpHost    = $container->getParameter('http_host');
 
         $this->client = static::createClient(array(
             'environment' => $environment,
             'debug'       => true,
-        ));
+        ), ['HTTP_HOST' => $httpHost]);
     }
 
     /**
@@ -285,12 +287,36 @@ abstract class RestTestCase extends WebTestCase
      * @param int $height
      * @return UploadedFile
      */
-    protected function getFakeUploadedImage($width = 64, $height = 64)
+    protected function getFakeUploadedImage($width = null, $height = null)
     {
+        $width  !== null ?: 64;
+        $height !== null ?: 64;
+
         $environment = $this->getContainer()->get('kernel')->getEnvironment();
         $rootDir     = $this->getContainer()->getParameter('kernel.root_dir');
         $filePath    = Image::image($rootDir . '/cache/' . $environment, $width, $height, null);
         $fileName    = basename($filePath);
+        $file = new UploadedFile($filePath, $fileName);
+
+        return $file;
+    }
+
+    /**
+     * @param string $content
+     * @return UploadedFile
+     */
+    protected function getFakeUploadedTxtFile($content = 'Some text')
+    {
+        $environment = $this->getContainer()->get('kernel')->getEnvironment();
+        $rootDir     = $this->getContainer()->getParameter('kernel.root_dir');
+        $filePath    = $rootDir . '/cache/' . $environment . '/' . uniqid() . '.txt';
+
+        $result = (bool)file_put_contents($filePath, $content);
+        if (!$result) {
+            throw new \RuntimeException("Can't create file: $filePath.");
+        }
+
+        $fileName = basename($filePath);
         $file = new UploadedFile($filePath, $fileName);
 
         return $file;
@@ -484,57 +510,6 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
-     * @param $url
-     * @param $expectedStatusCode
-     * @param array $fields
-     */
-    protected function testUpdateImageSizes($url, $expectedStatusCode, array $fields)
-    {
-        foreach ($fields as $fieldName => $sizeSets) {
-            foreach ($sizeSets as $sizeSet) {
-                $width  = $sizeSet[0];
-                $height = $sizeSet[1];
-                $file   = $this->getFakeUploadedImage($width, $height);
-
-                $this->updateRequest($url, [], [$fieldName => $file]);
-                $this->assertStatusCode($expectedStatusCode, $this->client);
-            }
-        }
-    }
-
-    /**
-     * @param $url
-     * @param $expectedStatusCode
-     * @param array $executeFiles
-     */
-    protected function testUpdateExecuteFiles($url, $expectedStatusCode, array $executeFiles)
-    {
-        $this->updateRequest($url, [], $executeFiles);
-        $this->assertStatusCode($expectedStatusCode, $this->client);
-    }
-
-    /**
-     * @param $url
-     * @param $contentInsideFile
-     * @param $executeFiles
-     */
-    protected function testUpdateNotExecuteFiles($url, $contentInsideFile, $executeFiles)
-    {
-        foreach ($executeFiles as $fildName => $executeData) {
-            $this->updateRequest($url, [], [$fildName => $executeData['file']]);
-            $this->assertStatusCode(200, $this->client);
-
-            $this->queryRequest($url);
-            $this->assertStatusCode(200, $this->client);
-            $contentData = $this->getContentAsJson($this->client);
-
-            $fileUrl = $contentData[$executeData['property_field_name']];
-            $actualContent = $this->getFileContent($fileUrl);
-            $this->assertNotEquals($contentInsideFile, $actualContent);
-        }
-    }
-
-    /**
      * @param Client $client
      * @return mixed
      */
@@ -547,19 +522,17 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
-     * @param $fields
+     * @param string $url
+     * @param string $expectedContentType
+     * @param array  $thumbnails
      */
-    protected function testUploadedImages($fields)
+    protected function assertContentTypeUploadedFile($url, $expectedContentType, array $thumbnails = [])
     {
-        foreach ($fields as $filedName => $data) {
-            $actualContentType = $this->getFileContentType($data['url']);
-            $this->assertEquals($data['content_type'], $actualContentType);
+        $actualContentType = $this->getFileContentType($url);
+        $this->assertEquals($expectedContentType, $actualContentType);
 
-            $thumbnails = $data['thumbnails'];
-            foreach ($thumbnails as $thumbnailUrl) {
-                $actualContentType = $this->getFileContentType($thumbnailUrl);
-                $this->assertEquals($data['content_type'], $actualContentType);
-            }
+        foreach ($thumbnails as $thumbnailUrl) {
+            $this->assertContentTypeUploadedFile($thumbnailUrl, $expectedContentType);
         }
     }
 }
