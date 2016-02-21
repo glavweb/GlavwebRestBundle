@@ -62,14 +62,15 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
-     * @param array  $fixtureFiles
+     * @param array $fixtureFiles
+     * @param bool $append
      * @param string $username
      * @param string $password
      * @return array
      */
-    protected function loadFixturesAndAuthenticate($fixtureFiles = [], $username = 'admin', $password = 'qwerty')
+    protected function loadFixturesAndAuthenticate($fixtureFiles = [], $append = false, $username = 'admin', $password = 'qwerty')
     {
-        $objects = $this->loadFixtureFiles($fixtureFiles);
+        $objects = $this->loadFixtureFiles($fixtureFiles, $append);
         $this->authenticate($username, $password);
 
         return $objects;
@@ -371,6 +372,16 @@ abstract class RestTestCase extends WebTestCase
     protected function updateRequest($url, array $data = [], array $files = [])
     {
         $this->restRequest('PUT', $url, $data, $files);
+    }
+
+    /**
+     * @param string $url
+     * @param array $data
+     * @param array $files
+     */
+    protected function patchRequest($url, array $data = [], array $files = [])
+    {
+        $this->restRequest('PATCH', $url, $data, $files);
     }
 
     /**
