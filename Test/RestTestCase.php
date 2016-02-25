@@ -14,6 +14,8 @@ use Symfony\Component\HttpFoundation\Response;
  */
 abstract class RestTestCase extends WebTestCase
 {
+    const MODE_CHECK_FIRST = 'check_first';
+
     /**
      * @var Client
      */
@@ -111,8 +113,9 @@ abstract class RestTestCase extends WebTestCase
      * @param Response $response
      * @param int $statusCode
      * @param array $expectedData
+     * @param string $mode
      */
-    protected function assertJsonResponse(Response $response, $statusCode = 200, array $expectedData = array())
+    protected function assertJsonResponse(Response $response, $statusCode = 200, array $expectedData = array(), $mode = null)
     {
         $actualJson = $response->getContent();
 
@@ -131,6 +134,11 @@ abstract class RestTestCase extends WebTestCase
 
         if ($expectedData) {
             $actualData = json_decode($actualJson, true);
+
+            if ($mode == self::MODE_CHECK_FIRST) {
+                $expectedData = current($expectedData);
+                $actualData   = current($actualData);
+            }
 
             self::checkAndPrepareArrays($expectedData, $actualData);
             self::clearActualArray($expectedData, $actualData);
