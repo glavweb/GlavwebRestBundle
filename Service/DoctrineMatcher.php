@@ -89,6 +89,23 @@ class DoctrineMatcher
         $expr = $queryBuilder->expr();
 
         foreach ($fields as $field => $value) {
+            if (strpos($field, '.') > 0) {
+                $joins = explode('.', $field);
+
+                $joinAlias = $alias;
+                foreach ($joins as $joinFieldName) {
+                    $queryBuilder->join($joinAlias . '.' . $joinFieldName, $joinFieldName);
+                    $joinAlias = $joinFieldName;
+                }
+
+                $queryBuilder
+                    ->andWhere($joinFieldName . ' = :' . $joinFieldName)
+                    ->setParameter($joinFieldName, $value)
+                ;
+
+                continue;
+            }
+            
             if ($classMetadata->hasField($field)) {
                 $fieldType = $classMetadata->getTypeOfField($field);
                 $reflectionClass = new \ReflectionClass(Type::getType($fieldType));
