@@ -26,27 +26,27 @@ abstract class AbstractSerializationListener implements EventSubscriberInterface
     /**
      * @var UploaderHelper
      */
-    private $uploaderHelper;
+    protected $uploaderHelper;
 
     /**
      * @var Registry
      */
-    private $doctrine;
+    protected $doctrine;
 
     /**
      * @var ImagineHelper
      */
-    private $imagineHelper;
+    protected $imagineHelper;
     
     /**
      * @var MetadataReader
      */
-    private $metadataReader;
+    protected $metadataReader;
     
     /**
      * @var Reader
      */
-    private $annotationsReader;
+    protected $annotationsReader;
 
     /**
      * @param UploaderHelper $uploaderHelper
