@@ -73,7 +73,10 @@ abstract class RestTestCase extends WebTestCase
     protected function loadFixturesAndAuthenticate($fixtureFiles = [], $append = false, $username = 'admin', $password = 'qwerty')
     {
         $objects = $this->loadFixtureFiles($fixtureFiles, $append);
-        $this->authenticate($username, $password);
+
+        if ($username !== null) {
+            $this->authenticate($username, $password);
+        }
 
         return $objects;
     }
