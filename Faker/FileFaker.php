@@ -42,8 +42,8 @@ class FileFaker
         $width  !== null ?: 64;
         $height !== null ?: 64;
 
-        $filePath    = Image::image($this->getCacheDir(), $width, $height, null);
-        $fileName    = basename($filePath);
+        $filePath = Image::image($this->getCacheDir(), $width, $height, null);
+        $fileName = basename($filePath);
         $file = new UploadedFile($filePath, $fileName);
 
         return $file;

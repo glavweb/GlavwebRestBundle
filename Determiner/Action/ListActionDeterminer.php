@@ -2,10 +2,9 @@
 
 namespace Glavweb\RestBundle\Determiner\Action;
 
-use Doctrine\ORM\UnitOfWork;
-use Doctrine\Bundle\DoctrineBundle\Registry;
 use FOS\RestBundle\Controller\Annotations\QueryParam;
 use FOS\RestBundle\Request\ParamReaderInterface;
+use Glavweb\RestBundle\Determiner\DeterminerHandler;
 use Symfony\Component\Routing\RouterInterface;
 
 /**
@@ -15,9 +14,9 @@ use Symfony\Component\Routing\RouterInterface;
 class ListActionDeterminer
 {
     /**
-     * @var Registry
+     * @var DeterminerHandler
      */
-    protected $doctrine;
+    protected $determinerHandler;
 
     /**
      * @var RouterInterface
@@ -37,13 +36,13 @@ class ListActionDeterminer
     /**
      * ListActionDeterminer constructor.
      *
-     * @param Registry $doctrine
+     * @param DeterminerHandler $determinerHandler
      * @param RouterInterface $router
      * @param ParamReaderInterface $paramFetcherReader
      */
-    public function __construct(Registry $doctrine, RouterInterface $router, ParamReaderInterface $paramFetcherReader)
+    public function __construct(DeterminerHandler $determinerHandler, RouterInterface $router, ParamReaderInterface $paramFetcherReader)
     {
-        $this->doctrine           = $doctrine;
+        $this->determinerHandler  = $determinerHandler;
         $this->router             = $router;
         $this->paramFetcherReader = $paramFetcherReader;
     }
@@ -65,8 +64,6 @@ class ListActionDeterminer
      */
     public function determineCases($uri)
     {
-        /** @var UnitOfWork $uow */
-        $uow = $this->doctrine->getManager()->getUnitOfWork();
         $filters = $this->getFilters($uri);
 
         $cases = [];
@@ -76,7 +73,7 @@ class ListActionDeterminer
             }
 
             $modelId = $model->getId();
-            $values = $uow->getOriginalEntityData($model);
+            $values = $this->getEntityData($model);
             foreach ($values as $fieldName => $value) {
                 if (!isset($filters[$fieldName])) {
                     continue;
@@ -85,6 +82,7 @@ class ListActionDeterminer
                 if ($value instanceof \DateTime) {
                     $value = $value->format('c');
                 }
+                $value = '=' . $value;
 
                 $key = null;
                 if (isset($cases[$fieldName])) {
@@ -93,7 +91,7 @@ class ListActionDeterminer
 
                 if (!$key) {
                     $cases[$fieldName] = [
-                        'value'    => $value,
+                        'values'    => [$fieldName => $value],
                         'expected' => [
                             ['id' => $modelId]
                         ]
@@ -152,5 +150,23 @@ class ListActionDeterminer
         }
 
         return null;
+    }
+
+    /**
+     * @param array $model
+     * @return array
+     */
+    private function getEntityData($model)
+    {
+        $modelClass = get_class($model);
+        $fields = $this->determinerHandler->getFields($modelClass);
+
+        $data = [];
+        foreach ($fields as $fieldName => $fieldType) {
+            $getter = 'get' . ucfirst($fieldName);
+            $data[$fieldName] = $model->$getter();
+        }
+
+        return $data;
     }
 }

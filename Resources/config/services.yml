@@ -28,7 +28,7 @@ services:
 
     glavweb_rest.list_action_determiner:
         class: Glavweb\RestBundle\Determiner\Action\ListActionDeterminer
-        arguments: [@doctrine, @router, @fos_rest.request.param_fetcher.reader]
+        arguments: [@glavweb_rest.test_determiner_handler, @router, @fos_rest.request.param_fetcher.reader]
 
     glavweb_rest.update_action_determiner:
         class: Glavweb\RestBundle\Determiner\Action\UpdateActionDeterminer

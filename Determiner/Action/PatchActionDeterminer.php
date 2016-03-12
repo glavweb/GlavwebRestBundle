@@ -145,7 +145,7 @@ class PatchActionDeterminer
                 $expectedValue = ['id' => $value];
     
             } elseif ($fieldType == 'date' or $fieldType == 'datetime') {
-                $dateTime = new \DateTime($value);
+                $dateTime = $value instanceof \DateTime ? $value : new \DateTime($value);
                 $expectedValue = $dateTime->format('c');
     
             } else {

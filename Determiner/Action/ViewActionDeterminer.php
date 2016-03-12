@@ -98,13 +98,15 @@ class ViewActionDeterminer
                 continue;
             }
 
-            if (isset($associations[$fieldName]) && method_exists($value, 'getId')) {
-                $expectedValuesForTest[$fieldName] = ['id' => $value->getId()];
+            if (isset($associations[$fieldName])) {
+                if (method_exists($value, 'getId')) {
+                    $expectedValuesForTest[$fieldName] = ['id' => $value->getId()];
+                }
 
             } else {
                 $fieldType = $fields[$fieldName];
                 if ($fieldType == 'date' or $fieldType == 'datetime') {
-                    $dateTime = new \DateTime($value);
+                    $dateTime = $value instanceof \DateTime ? $value : new \DateTime($value);
                     $expectedValuesForTest[$fieldName] = $dateTime->format('c');
 
                 } else {

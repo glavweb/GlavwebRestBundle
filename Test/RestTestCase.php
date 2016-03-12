@@ -25,6 +25,21 @@ abstract class RestTestCase extends WebTestCase
     const MODE_CHECK_FIRST = 'check_first';
 
     /**
+     * @var Client|null
+     */
+    private static $storedClient = null;
+
+    /**
+     * @var array
+     */
+    private static $storedAuthenticateResponse = [];
+
+    /**
+     * @var array
+     */
+    private static $storedFixtureObjects = [];
+
+    /**
      * @var Client
      */
     protected $client;
@@ -35,15 +50,35 @@ abstract class RestTestCase extends WebTestCase
     protected $authenticateResponse = array();
 
     /**
+     * @var bool
+     */
+    protected $useStored = false;
+
+    /**
      * Set Up
      */
     public function setUp()
+    {
+        if ($this->useStored) {
+            $client = $this->getStoredClient();
+
+        } else {
+            $client = $this->createCurrentClient();
+        }
+
+        $this->client = $client;
+    }
+
+    /**
+     * @return Client
+     */
+    protected function createCurrentClient()
     {
         $container = $this->getContainer();
         $environment = $container->get('kernel')->getEnvironment();
         $httpHost    = $container->getParameter('http_host');
 
-        $this->client = static::createClient(array(
+        return static::createClient(array(
             'environment' => $environment,
             'debug'       => false,
         ), ['HTTP_HOST' => $httpHost]);
@@ -56,19 +91,14 @@ abstract class RestTestCase extends WebTestCase
      */
     public function authenticate($username, $password)
     {
-        $this->client->request('POST', '/api/sign-in', array(
-            'username' => $username,
-            'password' => $password
-        ), array(), array('HTTP_ACCEPT' => 'application/json'));
-        $loginResponse = json_decode($this->client->getResponse()->getContent());
+        if ($this->useStored) {
+            $authenticateResponse = $this->getStoredAuthenticateResponse($username, $password);
 
-        $this->authenticateResponse = array(
-            'token'    => (isset($loginResponse->apiToken) ? $loginResponse->apiToken : null),
-            'expireAt' => (isset($loginResponse->createdAt) ? $loginResponse->createdAt : null),
-            'username' => (isset($loginResponse->login) ? $loginResponse->login : null)
-        );
+        } else {
+            $authenticateResponse = $this->doAuthenticate($username, $password);
+        }
 
-        return $this->authenticateResponse;
+        return $this->authenticateResponse = $authenticateResponse;
     }
 
     /**
@@ -80,13 +110,89 @@ abstract class RestTestCase extends WebTestCase
      */
     protected function loadFixturesAndAuthenticate($fixtureFiles = [], $append = false, $username = 'admin', $password = 'qwerty')
     {
-        $objects = $this->loadFixtureFiles($fixtureFiles, $append);
+        if ($this->useStored) {
+            $objects = $this->getStoredFixtureFiles($fixtureFiles, $append);
+
+        } else {
+            $objects = $this->loadFixtureFiles($fixtureFiles, $append);
+        }
 
         if ($username !== null) {
             $this->authenticate($username, $password);
         }
 
         return $objects;
+    }
+
+    /**
+     * @param string $username
+     * @param string $password
+     * @return array
+     */
+    private function doAuthenticate($username, $password)
+    {
+        $this->client->request('POST', '/api/sign-in', array(
+            'username' => $username,
+            'password' => $password
+        ), array(), array('HTTP_ACCEPT' => 'application/json'));
+        $loginResponse = json_decode($this->client->getResponse()->getContent());
+
+        $authenticateResponse = array(
+            'token'    => (isset($loginResponse->apiToken) ? $loginResponse->apiToken : null),
+            'expireAt' => (isset($loginResponse->createdAt) ? $loginResponse->createdAt : null),
+            'username' => (isset($loginResponse->login) ? $loginResponse->login : null)
+        );
+
+        return $authenticateResponse;
+    }
+
+    /**
+     * @return Client
+     */
+    protected function getStoredClient()
+    {
+        if (!self::$storedClient) {
+            self::$storedClient = $this->createCurrentClient();
+        }
+
+        return self::$storedClient;
+    }
+
+    /**
+     * @param $username
+     * @param $password
+     * @return array
+     */
+    public function getStoredAuthenticateResponse($username, $password)
+    {
+        $cacheKey = md5($username . '_' . $password);
+        if (!isset(self::$storedAuthenticateResponse[$cacheKey])) {
+            self::$storedAuthenticateResponse[$cacheKey] = $this->doAuthenticate($username, $password);
+        }
+
+        return self::$storedAuthenticateResponse[$cacheKey];
+    }
+
+    /**
+     * @param $fixtureFiles
+     * @param $append
+     * @return array
+     */
+    public function getStoredFixtureFiles($fixtureFiles, $append)
+    {
+        $cacheKey = md5(implode('__' , $fixtureFiles) . '__' . (int)$append);
+        if (!isset(self::$storedFixtureObjects[$cacheKey])) {
+            self::$storedFixtureObjects[$cacheKey] = $this->loadFixtureFiles($fixtureFiles, $append);
+            self::$storedAuthenticateResponse = []; // @todo ugly solution
+
+        } else {
+            $em = $this->getContainer()->get('doctrine')->getManager();
+            foreach (self::$storedFixtureObjects[$cacheKey] as $model) {
+                $em->persist($model);
+            }
+        }
+
+        return self::$storedFixtureObjects[$cacheKey];
     }
 
     /**
@@ -119,21 +225,19 @@ abstract class RestTestCase extends WebTestCase
     /**
      * @param string $url
      * @param array $data
-     * @param array $files
      */
-    public function updateRequest($url, array $data = [], array $files = [])
+    public function updateRequest($url, array $data = [])
     {
-        $this->restRequest('PUT', $url, $data, $files);
+        $this->restRequest('PUT', $url, $data);
     }
 
     /**
      * @param string $url
      * @param array $data
-     * @param array $files
      */
-    public function patchRequest($url, array $data = [], array $files = [])
+    public function patchRequest($url, array $data = [])
     {
-        $this->restRequest('PATCH', $url, $data, $files);
+        $this->restRequest('PATCH', $url, $data);
     }
 
     /**
@@ -318,8 +422,9 @@ abstract class RestTestCase extends WebTestCase
      * @param int $statusCode
      * @param array $expectedData
      * @param string $mode
+     * @param null $message
      */
-    public function assertJsonResponse(Response $response, $statusCode = 200, array $expectedData = array(), $mode = null)
+    public function assertJsonResponse(Response $response, $statusCode = 200, array $expectedData = array(), $mode = null, $message = null)
     {
         $actualJson = $response->getContent();
 
@@ -347,7 +452,11 @@ abstract class RestTestCase extends WebTestCase
             $expectedData = $dataTransformer->getExpectedData();
             $actualData   = $dataTransformer->getActualData();
 
-            $this->assertEquals($expectedData, $actualData, $actualJson);
+            if (!$message) {
+                $message = $actualJson;
+            }
+
+            $this->assertEquals($expectedData, $actualData, $message);
         }
     }
 
@@ -453,16 +562,16 @@ abstract class RestTestCase extends WebTestCase
             return (bool)$item;
         });
 
+        // Test list output (list scope)
+
         // Test cases
         $client = $this->getClient();
         foreach ($cases as $fieldName => $case) {
-            $value    = $case['value'];
+            $values   = $case['values'];
             $expected = $case['expected'];
 
-            $this->queryRequest($uri, [
-                $fieldName => '=' . $value,
-            ]);
-            $this->assertJsonResponse($client->getResponse(), 200, $expected);
+            $this->queryRequest($uri, $values);
+            $this->assertJsonResponse($client->getResponse(), 200, $expected, null, 'case: ' . $fieldName);
         }
     }
 

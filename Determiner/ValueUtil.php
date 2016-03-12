@@ -85,7 +85,11 @@ class ValueUtil
 
             // is date
         } elseif ($fieldType == 'date' || $fieldType == 'datetime') {
-            $date = new \DateTime($value);
+            $date = $value;
+            if (!$value instanceof \DateTime) {
+                $date = new \DateTime($value);
+            }
+
             $value = $date->modify('+1 day')->format('Y-m-d');
 
         } else {

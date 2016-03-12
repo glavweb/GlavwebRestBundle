@@ -151,7 +151,7 @@ class UpdateActionDeterminer
             } else {
                 $fieldType = $fields[$fieldName];
                 if ($fieldType == 'date' or $fieldType == 'datetime') {
-                    $dateTime = new \DateTime($value);
+                    $dateTime = $value instanceof \DateTime ? $value : new \DateTime($value);
                     $expected[$fieldName] = $dateTime->format('c');
 
                 } else {
