@@ -65,7 +65,7 @@ class DoctrineMatcherResult
      */
     public function getList()
     {
-        $queryBuilder = $this->getQueryBuilder();
+        $queryBuilder = clone $this->getQueryBuilder();
         $alias        = $this->getAlias();
         $firstResult  = $this->getFirstResult();
         $maxResults   = $this->getMaxResults();
@@ -92,7 +92,7 @@ class DoctrineMatcherResult
         $total = $totalQueryBuilder
             ->select('COUNT(' . $alias . ')')
             ->getQuery()
-            ->getScalarResult()
+            ->getSingleScalarResult()
         ;
 
         return $total;

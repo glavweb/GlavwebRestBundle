@@ -54,11 +54,9 @@ class GlavwebRestController extends FOSRestController
         if ($limit > 0 && $total > 0 && $offset < $total) {
             $end = $offset + $limit;
             $end = $end > $total ? $total : $end;
-
-            if ($end < $total) {
-                $view->setStatusCode(Response::HTTP_PARTIAL_CONTENT);
-                $view->setHeader('Content-Range', "items $offset-$end/$total");
-            }
+            
+            $view->setStatusCode(Response::HTTP_PARTIAL_CONTENT);
+            $view->setHeader('Content-Range', "items $offset-$end/$total");
         }
     }
 
