@@ -143,11 +143,19 @@ class DoctrineMatcher
                 $associationMapping = $classMetadata->getAssociationMapping($field);
                 $type               = $associationMapping['type'];
 
-                if ($type == ClassMetadataInfo::MANY_TO_MANY && !is_array($value)) {
-                    $queryBuilder
-                        ->andWhere($expr->isMemberOf(":$field", "$alias.$field"))
-                        ->setParameter($field,  $value)
-                    ;
+                if ($type == ClassMetadataInfo::MANY_TO_MANY) {
+                    if (!is_array($value)) {
+                        $queryBuilder
+                            ->andWhere($expr->isMemberOf(":$field", "$alias.$field"))
+                            ->setParameter($field,  $value)
+                        ;
+                    } else {
+                        $queryBuilder->join($alias . '.' . $field, $field);
+                        $queryBuilder
+                            ->andWhere($field . ' in (:' . $field. ')')
+                            ->setParameter($field, $value)
+                        ;
+                    }
 
                 } else {
                     $className = $classMetadata->getAssociationTargetClass($field);
