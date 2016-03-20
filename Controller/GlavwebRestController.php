@@ -2,6 +2,7 @@
 
 namespace Glavweb\RestBundle\Controller;
 
+use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityRepository;
 use FOS\RestBundle\Controller\FOSRestController;
 use FOS\RestBundle\Request\ParamFetcherInterface;
@@ -95,15 +96,18 @@ class GlavwebRestController extends FOSRestController
 
     /**
      * @param DoctrineMatcherResult $matcherResult
-     * @param SerializationContext $serializationContext
-     * @return \FOS\RestBundle\View\View
+     * @param SerializationContext  $serializationContext
+     * @param string                $statusCode
+     * @param array                 $headers
+     * @param int                   $hydrationMode
+     * @return View
      */
-    protected function createViewByMatcher(DoctrineMatcherResult $matcherResult, SerializationContext $serializationContext, $statusCode = null, array $headers = array())
+    protected function createViewByMatcher(DoctrineMatcherResult $matcherResult, SerializationContext $serializationContext, $statusCode = null, array $headers = array(), $hydrationMode = AbstractQuery::HYDRATE_OBJECT)
     {
         $offset = $matcherResult->getFirstResult();
         $limit  = $matcherResult->getMaxResults();
 
-        $view = $this->view($matcherResult->getList(), $statusCode, $headers);
+        $view = $this->view($matcherResult->getList($hydrationMode), $statusCode, $headers);
         $this->setContentRangeHeader($view, $offset, $limit, $matcherResult->getTotal());
 
         return $view

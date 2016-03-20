@@ -8,6 +8,7 @@ use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\ClassMetadataInfo;
 use Doctrine\ORM\Query\Expr\Comparison;
+use Doctrine\ORM\QueryBuilder;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
@@ -79,96 +80,124 @@ class DoctrineMatcher
         $this->alias       = $alias;
 
         /** @var ClassMetadata $classMetadata */
-        $classMetadata = $this->doctrine->getManager()->getClassMetadata($repository->getClassName());
+        $em = $this->doctrine->getManager();
+        $classMetadata = $em->getClassMetadata($repository->getClassName());
 
         $fields = array_filter($fields, function ($value) {
             return !empty($value);
         });
 
         $queryBuilder = $repository->createQueryBuilder($alias);
-        $expr = $queryBuilder->expr();
-
         foreach ($fields as $field => $value) {
             if (strpos($field, '.') > 0) {
                 $joins = explode('.', $field);
-
-                $joinAlias = $alias;
+                $lastElement = $joins[count($joins) - 1];
+                
+                $joinAlias          = $alias;
+                $joinClassMetadata  = $classMetadata;
                 foreach ($joins as $joinFieldName) {
-                    $queryBuilder->join($joinAlias . '.' . $joinFieldName, $joinFieldName);
-                    $joinAlias = $joinFieldName;
-                }
+                    if ($joinClassMetadata->hasAssociation($joinFieldName)) {
+                        $isLastElement = $joinFieldName == $lastElement;
+                        if (!$isLastElement) {
+                            $queryBuilder->join($joinAlias . '.' . $joinFieldName, $joinFieldName);
 
-                $queryBuilder
-                    ->andWhere($joinFieldName . ' = :' . $joinFieldName)
-                    ->setParameter($joinFieldName, $value)
-                ;
+                            $joinAssociationMapping = $joinClassMetadata->getAssociationMapping($joinFieldName);
+                            $joinClassName = $joinAssociationMapping['targetEntity'];
 
-                continue;
-            }
-            
-            if ($classMetadata->hasField($field)) {
-                $fieldType = $classMetadata->getTypeOfField($field);
-                $reflectionClass = new \ReflectionClass(Type::getType($fieldType));
+                            $joinClassMetadata = $em->getClassMetadata($joinClassName);
+                            $joinAlias         = $joinFieldName;
+                        }
 
-                $operator = null;
-                if (is_array($value)) {
-                    $operator = self::IN;
-                }
-
-                // if enum type
-                if ($reflectionClass->isSubclassOf('\Fresh\DoctrineEnumBundle\DBAL\Types\AbstractEnumType')) {
-                    if (!$operator) {
-                        $operator = Comparison::EQ;
-                    }
-
-                    $value = preg_replace('/[^a-zA-Z0-9_]+/', '', $value);
-                }
-
-                if (!$operator) {
-                    list($operator, $value) = $this->separateOperator($value);
-                }
-
-                if ($operator == self::CONTAINS) {
-                    $queryBuilder->andWhere($expr->like($alias . '.' . $field, $expr->literal("%$value%")));
-
-                } elseif ($operator == self::IN) {
-                    $queryBuilder->andWhere($expr->in($alias . '.' . $field, $value));
-
-                } else {
-                    $comparison = new Comparison($alias . '.' . $field, $operator, $expr->literal($value));
-                    $queryBuilder->andWhere($comparison);
-                }
-
-            } elseif ($classMetadata->hasAssociation($field)) {
-                $associationMapping = $classMetadata->getAssociationMapping($field);
-                $type               = $associationMapping['type'];
-
-                if ($type == ClassMetadataInfo::MANY_TO_MANY) {
-                    if (!is_array($value)) {
-                        $queryBuilder
-                            ->andWhere($expr->isMemberOf(":$field", "$alias.$field"))
-                            ->setParameter($field,  $value)
-                        ;
                     } else {
-                        $queryBuilder->join($alias . '.' . $field, $field);
-                        $queryBuilder
-                            ->andWhere($field . ' in (:' . $field. ')')
-                            ->setParameter($field, $value)
-                        ;
+                        break;
                     }
-
-                } else {
-                    $className = $classMetadata->getAssociationTargetClass($field);
-                    $entity = $this->doctrine->getManager()->find($className, $value);
-
-                    $queryBuilder->andWhere($expr->eq($alias . '.' . $field, $entity->getId()));
                 }
+
+                if (isset($joinFieldName)) {
+                    $this->addFilter($queryBuilder, $joinClassMetadata, $joinFieldName, $value, $joinAlias);
+                }
+
+            } else {
+                $this->addFilter($queryBuilder, $classMetadata, $field, $value, $alias);
             }
         }
 
         $result = new DoctrineMatcherResult($queryBuilder, $orderings, $firstResult, $maxResults, $alias);
 
         return $result;
+    }
+
+    /**
+     * @param QueryBuilder $queryBuilder
+     * @param ClassMetadata $classMetadata
+     * @param string $field
+     * @param mixed  $value
+     * @param string $alias
+     * @throws \Doctrine\DBAL\DBALException
+     * @throws \Doctrine\ORM\Mapping\MappingException
+     */
+    private function addFilter(QueryBuilder $queryBuilder, ClassMetadata $classMetadata, $field, $value, $alias)
+    {
+        $expr = $queryBuilder->expr();
+        
+        if ($classMetadata->hasField($field)) {
+            $fieldType = $classMetadata->getTypeOfField($field);
+            $reflectionClass = new \ReflectionClass(Type::getType($fieldType));
+
+            $operator = null;
+            if (is_array($value)) {
+                $operator = self::IN;
+            }
+
+            // if enum type
+            if ($reflectionClass->isSubclassOf('\Fresh\DoctrineEnumBundle\DBAL\Types\AbstractEnumType')) {
+                if (!$operator) {
+                    $operator = Comparison::EQ;
+                }
+
+                $value = preg_replace('/[^a-zA-Z0-9_]+/', '', $value);
+            }
+
+            if (!$operator) {
+                list($operator, $value) = $this->separateOperator($value);
+            }
+
+            if ($operator == self::CONTAINS) {
+                $queryBuilder->andWhere($expr->like($alias . '.' . $field, $expr->literal("%$value%")));
+
+            } elseif ($operator == self::IN) {
+                $queryBuilder->andWhere($expr->in($alias . '.' . $field, $value));
+
+            } else {
+                $comparison = new Comparison($alias . '.' . $field, $operator, $expr->literal($value));
+                $queryBuilder->andWhere($comparison);
+            }
+
+        } elseif ($classMetadata->hasAssociation($field)) {
+            $associationMapping = $classMetadata->getAssociationMapping($field);
+            $type               = $associationMapping['type'];
+
+            if (in_array($type, [ClassMetadataInfo::MANY_TO_MANY, ClassMetadataInfo::ONE_TO_MANY])) {
+                if (!is_array($value)) {
+                    $queryBuilder
+                        ->andWhere($expr->isMemberOf(":$field", "$alias.$field"))
+                        ->setParameter($field,  $value)
+                    ;
+                } else {
+                    $queryBuilder->join($alias . '.' . $field, $field);
+                    $queryBuilder
+                        ->andWhere($field . ' in (:' . $field. ')')
+                        ->setParameter($field, $value)
+                    ;
+                }
+
+            } else {
+                $className = $classMetadata->getAssociationTargetClass($field);
+                $entity = $this->doctrine->getManager()->find($className, $value);
+
+                $queryBuilder->andWhere($expr->eq($alias . '.' . $field, $entity->getId()));
+            }
+        }
     }
 
     /**

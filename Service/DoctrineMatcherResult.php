@@ -4,6 +4,7 @@ namespace Glavweb\RestBundle\Service;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\DBAL\Types\Type;
+use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Query\Expr\Comparison;
@@ -62,8 +63,9 @@ class DoctrineMatcherResult
 
     /**
      * @return array
+     * @param int $hydrationMode
      */
-    public function getList()
+    public function getList($hydrationMode = AbstractQuery::HYDRATE_OBJECT)
     {
         $queryBuilder = clone $this->getQueryBuilder();
         $alias        = $this->getAlias();
@@ -78,7 +80,7 @@ class DoctrineMatcherResult
             $queryBuilder->addOrderBy($alias . '.' . $fieldName, $order);
         }
 
-        return $queryBuilder->getQuery()->getResult();
+        return $queryBuilder->getQuery()->getResult($hydrationMode);
     }
 
     /**
