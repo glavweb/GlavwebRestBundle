@@ -152,9 +152,9 @@ class DoctrineMatcher
             // if enum type
             if ($reflectionClass->isSubclassOf('\Fresh\DoctrineEnumBundle\DBAL\Types\AbstractEnumType')) {
                 if (!$operator) {
-                    $operator = Comparison::EQ;
+                    $operator = $value[0] == '!' ? Comparison::NEQ : Comparison::EQ;
                 }
-
+                
                 $value = preg_replace('/[^a-zA-Z0-9_]+/', '', $value);
             }
 
