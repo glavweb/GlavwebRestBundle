@@ -17,27 +17,12 @@ use Symfony\Component\HttpFoundation\Response;
  * Class DoctrineMatcherResult
  * @package Glavweb\RestBundle\Service
  */
-class DoctrineMatcherResult
+class DoctrineMatcherResult extends AbstractDoctrineMatcherResult
 {
     /**
      * @var QueryBuilder
      */
     private $queryBuilder;
-
-    /**
-     * @var array
-     */
-    private $orderings;
-
-    /**
-     * @var int
-     */
-    private $firstResult;
-
-    /**
-     * @var int
-     */
-    private $maxResults;
 
     /**
      * @var string
