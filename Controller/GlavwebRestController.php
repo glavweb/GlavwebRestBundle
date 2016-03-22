@@ -3,10 +3,13 @@
 namespace Glavweb\RestBundle\Controller;
 
 use Doctrine\ORM\AbstractQuery;
+use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityRepository;
+use Doctrine\ORM\Query\ResultSetMapping;
 use FOS\RestBundle\Controller\FOSRestController;
 use FOS\RestBundle\Request\ParamFetcherInterface;
 use FOS\RestBundle\View\View;
+use Glavweb\RestBundle\Service\AbstractDoctrineMatcherResult;
 use Glavweb\RestBundle\Service\DoctrineMatcherResult;
 use JMS\Serializer\Exclusion\GroupsExclusionStrategy;
 use JMS\Serializer\SerializationContext;
@@ -52,7 +55,7 @@ class GlavwebRestController extends FOSRestController
         $limit  = (int)$limit;
         $total  = (int)$total;
 
-        if ($limit > 0 && $total > 0 && $offset < $total) {
+        if ($limit > 0 && $total > 0 && $offset < $total && $total > $limit) {
             $end = $offset + $limit;
             $end = $end > $total ? $total : $end;
             
@@ -95,14 +98,14 @@ class GlavwebRestController extends FOSRestController
     }
 
     /**
-     * @param DoctrineMatcherResult $matcherResult
-     * @param SerializationContext  $serializationContext
-     * @param string                $statusCode
-     * @param array                 $headers
-     * @param int                   $hydrationMode
+     * @param AbstractDoctrineMatcherResult $matcherResult
+     * @param SerializationContext          $serializationContext
+     * @param string                        $statusCode
+     * @param array                         $headers
+     * @param int                           $hydrationMode
      * @return View
      */
-    protected function createViewByMatcher(DoctrineMatcherResult $matcherResult, SerializationContext $serializationContext, $statusCode = null, array $headers = array(), $hydrationMode = AbstractQuery::HYDRATE_OBJECT)
+    protected function createViewByMatcher(AbstractDoctrineMatcherResult $matcherResult, SerializationContext $serializationContext, $statusCode = null, array $headers = array(), $hydrationMode = AbstractQuery::HYDRATE_OBJECT)
     {
         $offset = $matcherResult->getFirstResult();
         $limit  = $matcherResult->getMaxResults();

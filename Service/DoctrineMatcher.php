@@ -4,10 +4,14 @@ namespace Glavweb\RestBundle\Service;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\DBAL\Types\Type;
+use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\ClassMetadataInfo;
+use Doctrine\ORM\NativeQuery;
+use Doctrine\ORM\Query;
 use Doctrine\ORM\Query\Expr\Comparison;
+use Doctrine\ORM\Query\ResultSetMapping;
 use Doctrine\ORM\QueryBuilder;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -79,6 +83,80 @@ class DoctrineMatcher
         $this->maxResults  = $maxResults;
         $this->alias       = $alias;
 
+        $queryBuilder = $this->doMatching($repository, $fields, $alias);
+        $result = new DoctrineMatcherResult($queryBuilder, $orderings, $firstResult, $maxResults, $alias);
+
+        return $result;
+    }
+
+    /**
+     * @param EntityRepository $repository
+     * @param array $fields
+     * @param array $orderings
+     * @param int $firstResult
+     * @param int $maxResults
+     * @param string $alias
+     * @param $callback
+     * @return DoctrineMatcherResult
+     */
+    public function matchingNativeSql(EntityRepository $repository, array $fields = array(), array $orderings = null, $firstResult = 0, $maxResults = null, $alias = 't', $callback)
+    {
+        $em           = $this->doctrine->getManager();
+        $queryBuilder = $this->doMatching($repository, $fields, 't');
+        $subQuery     = $this->buildSql($queryBuilder);
+        $rsm          = $this->createResultSetMapping($repository->getClassName(), $alias);
+
+        $query = $callback($subQuery, $rsm, $em);
+        if (!$query instanceof NativeQuery) {
+            throw new \RuntimeException('Callback must be return instance of Doctrine\ORM\NativeQuery.');
+        }
+
+        // Add conditions
+        $this->addNativeConditions($fields, $rsm, $query);
+
+        $orderings = $this->transformOrderingForNativeSql((array)$orderings, $rsm);
+
+        $this->orderings   = $orderings;
+        $this->firstResult = $firstResult;
+        $this->maxResults  = $maxResults;
+        $this->alias       = $alias;
+
+        $result = new DoctrineNativeSqlMatcherResult($query, $this->orderings, $firstResult, $maxResults);
+
+        return $result;
+    }
+
+    /**
+     * @param string $class
+     * @param string $alias
+     * @return ResultSetMapping
+     */
+    protected function createResultSetMapping($class, $alias)
+    {
+        /** @var EntityManager $em */
+        $em = $this->doctrine->getManager();
+
+        $rsm = new ResultSetMapping();
+        $rsm->addEntityResult($class, $alias);
+
+        $classMetaData = $em->getClassMetadata($class);
+        $fieldNames = $classMetaData->getFieldNames();
+        foreach ($fieldNames as $fieldName) {
+            $rsm->addFieldResult($alias, $classMetaData->getColumnName($fieldName), $fieldName);
+        }
+
+        return $rsm;
+    }
+
+    /**
+     * @param EntityRepository $repository
+     * @param array $fields
+     * @param string $alias
+     * @return QueryBuilder
+     * @throws \Doctrine\ORM\Mapping\MappingException
+     */
+    protected function doMatching(EntityRepository $repository, array $fields, $alias)
+    {
         /** @var ClassMetadata $classMetadata */
         $em = $this->doctrine->getManager();
         $classMetadata = $em->getClassMetadata($repository->getClassName());
@@ -92,7 +170,7 @@ class DoctrineMatcher
             if (strpos($field, '.') > 0) {
                 $joins = explode('.', $field);
                 $lastElement = $joins[count($joins) - 1];
-                
+
                 $joinAlias          = $alias;
                 $joinClassMetadata  = $classMetadata;
                 foreach ($joins as $joinFieldName) {
@@ -105,7 +183,7 @@ class DoctrineMatcher
                             $joinClassName = $joinAssociationMapping['targetEntity'];
 
                             $joinClassMetadata = $em->getClassMetadata($joinClassName);
-                            $joinAlias         = $joinFieldName;
+                            $joinAlias = $joinFieldName;
                         }
 
                     } else {
@@ -122,9 +200,29 @@ class DoctrineMatcher
             }
         }
 
-        $result = new DoctrineMatcherResult($queryBuilder, $orderings, $firstResult, $maxResults, $alias);
+        return $queryBuilder;
+    }
 
-        return $result;
+    /**
+     * @param QueryBuilder $queryBuilder
+     * @param bool         $replaceSelect
+     * @return string
+     */
+    public function buildSql(QueryBuilder $queryBuilder, $replaceSelect = true)
+    {
+        $sql = $queryBuilder->getQuery()->getSQL();
+
+        if ($replaceSelect) {
+            $result = preg_match('/SELECT .*? FROM [\w]* ([^ ]*)/', $sql, $matches);
+            if (!$result) {
+                throw new \RuntimeException('Alias not found.');
+            }
+
+            $alias = $matches[1];
+            $sql = preg_replace('/SELECT .*? FROM/', 'SELECT ' . $alias . '.* FROM', $sql);
+        }
+
+        return $sql;
     }
 
     /**
@@ -256,5 +354,70 @@ class DoctrineMatcher
         }
 
         return array($operator, $value);
+    }
+
+    /**
+     * @param array $orderings
+     * @param ResultSetMapping $rsm
+     * @return array
+     */
+    private function transformOrderingForNativeSql(array $orderings, ResultSetMapping $rsm)
+    {
+        $scalarMappings = $rsm->scalarMappings;
+        foreach ($orderings as $fieldName => $sort) {
+            if (($alias = array_search($fieldName, $scalarMappings)) !== false) {
+                unset($orderings[$fieldName]);
+                $orderings[$alias] = $sort;
+            }
+        }
+
+        return $orderings;
+    }
+
+    /**
+     * @param array $fields
+     * @param ResultSetMapping $rsm
+     * @param NativeQuery $query
+     */
+    private function addNativeConditions(array $fields, ResultSetMapping $rsm, NativeQuery $query)
+    {
+        $expr = new Query\Expr();
+
+        $whereParts = [];
+        $scalarMappings = $rsm->scalarMappings;
+        foreach ($scalarMappings as $fieldAlias => $fieldName) {
+            if (!isset($fields[$fieldName])) {
+                continue;
+            }
+            $value = $fields[$fieldName];
+
+            $operator = null;
+            if (is_array($value)) {
+                $operator = self::IN;
+            }
+
+            if (!$operator) {
+                list($operator, $value) = $this->separateOperator($value);
+            }
+
+            if ($operator == self::CONTAINS) {
+                $whereParts[] = $expr->like($fieldAlias, $expr->literal("%$value%"));
+
+            } elseif ($operator == self::IN) {
+                $whereParts[] = $expr->in($fieldAlias, $value);
+
+            } else {
+                $whereParts[] = new Comparison($fieldAlias, $operator, $expr->literal($value));
+            }
+        }
+
+        $uniqueAlias = uniqid();
+        $sql = 'SELECT ' . $uniqueAlias . '.* FROM (' . $query->getSQL() . ') as ' . $uniqueAlias;
+
+        if ($whereParts) {
+            $sql .= ' WHERE ' . implode(' AND ', $whereParts);
+        }
+
+        $query->setSQL($sql);
     }
 }
