@@ -97,7 +97,7 @@ class DoctrineMatcher
      * @param int $maxResults
      * @param string $alias
      * @param $callback
-     * @return DoctrineMatcherResult
+     * @return DoctrineNativeSqlMatcherResult
      */
     public function matchingNativeSql(EntityRepository $repository, array $fields = array(), array $orderings = null, $firstResult = 0, $maxResults = null, $alias = 't', $callback)
     {

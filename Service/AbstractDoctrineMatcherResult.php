@@ -7,6 +7,7 @@ use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Doctrine\ORM\Query;
 use Doctrine\ORM\Query\Expr\Comparison;
 use Doctrine\ORM\QueryBuilder;
 use Symfony\Component\Form\AbstractType;
@@ -35,10 +36,14 @@ abstract class AbstractDoctrineMatcherResult
     protected $maxResults;
 
     /**
-     * @return array
-     * @param int $hydrationMode
+     * @var int|string
      */
-    abstract public function getList($hydrationMode = AbstractQuery::HYDRATE_OBJECT);
+    protected $hydrationMode = AbstractQuery::HYDRATE_OBJECT;
+
+    /**
+     * @return array
+     */
+    abstract public function getList();
 
     /**
      * @return mixed
@@ -67,5 +72,21 @@ abstract class AbstractDoctrineMatcherResult
     public function getMaxResults()
     {
         return $this->maxResults;
+    }
+
+    /**
+     * @return int|string
+     */
+    public function getHydrationMode()
+    {
+        return $this->hydrationMode;
+    }
+
+    /**
+     * @param int|string $hydrationMode
+     */
+    public function setHydrationMode($hydrationMode)
+    {
+        $this->hydrationMode = $hydrationMode;
     }
 }

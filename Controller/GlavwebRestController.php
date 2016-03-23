@@ -102,15 +102,14 @@ class GlavwebRestController extends FOSRestController
      * @param SerializationContext          $serializationContext
      * @param string                        $statusCode
      * @param array                         $headers
-     * @param int                           $hydrationMode
      * @return View
      */
-    protected function createViewByMatcher(AbstractDoctrineMatcherResult $matcherResult, SerializationContext $serializationContext, $statusCode = null, array $headers = array(), $hydrationMode = AbstractQuery::HYDRATE_OBJECT)
+    protected function createViewByMatcher(AbstractDoctrineMatcherResult $matcherResult, SerializationContext $serializationContext, $statusCode = null, array $headers = array())
     {
         $offset = $matcherResult->getFirstResult();
         $limit  = $matcherResult->getMaxResults();
 
-        $view = $this->view($matcherResult->getList($hydrationMode), $statusCode, $headers);
+        $view = $this->view($matcherResult->getList(), $statusCode, $headers);
         $this->setContentRangeHeader($view, $offset, $limit, $matcherResult->getTotal());
 
         return $view

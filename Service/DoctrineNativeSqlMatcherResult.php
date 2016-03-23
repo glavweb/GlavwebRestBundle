@@ -41,9 +41,8 @@ class DoctrineNativeSqlMatcherResult extends AbstractDoctrineMatcherResult
 
     /**
      * @return array
-     * @param int $hydrationMode
      */
-    public function getList($hydrationMode = AbstractQuery::HYDRATE_OBJECT)
+    public function getList()
     {
         $query = $this->query;
         $sql = $query->getSQL();
@@ -70,7 +69,7 @@ class DoctrineNativeSqlMatcherResult extends AbstractDoctrineMatcherResult
 
         $query->setSQL($sql);
 
-        return $query->getResult($hydrationMode);
+        return $query->getResult($this->getHydrationMode());
     }
 
     /**

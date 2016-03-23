@@ -7,6 +7,7 @@ use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Doctrine\ORM\Query;
 use Doctrine\ORM\Query\Expr\Comparison;
 use Doctrine\ORM\QueryBuilder;
 use Symfony\Component\Form\AbstractType;
@@ -30,6 +31,11 @@ class DoctrineMatcherResult extends AbstractDoctrineMatcherResult
     private $alias;
 
     /**
+     * @var array
+     */
+    private $queryHints = [];
+
+    /**
      * @param QueryBuilder $queryBuilder
      * @param array            $orderings
      * @param int              $firstResult
@@ -47,10 +53,50 @@ class DoctrineMatcherResult extends AbstractDoctrineMatcherResult
     }
 
     /**
-     * @return array
-     * @param int $hydrationMode
+     * @return QueryBuilder
      */
-    public function getList($hydrationMode = AbstractQuery::HYDRATE_OBJECT)
+    public function getQueryBuilder()
+    {
+        return $this->queryBuilder;
+    }
+
+    /**
+     * @return string
+     */
+    public function getAlias()
+    {
+        return $this->alias;
+    }
+
+    /**
+     * @return array
+     */
+    public function getQueryHints()
+    {
+        return $this->queryHints;
+    }
+
+    /**
+     * @param array $queryHints
+     */
+    public function setQueryHints($queryHints)
+    {
+        $this->queryHints = $queryHints;
+    }
+
+    /**
+     * @param string $name
+     * @param mixed $value
+     */
+    public function setQueryHint($name, $value)
+    {
+        $this->queryHints[$name] = $value;
+    }
+
+    /**
+     * @return array
+     */
+    public function getList()
     {
         $queryBuilder = clone $this->getQueryBuilder();
         $alias        = $this->getAlias();
@@ -65,7 +111,10 @@ class DoctrineMatcherResult extends AbstractDoctrineMatcherResult
             $queryBuilder->addOrderBy($alias . '.' . $fieldName, $order);
         }
 
-        return $queryBuilder->getQuery()->getResult($hydrationMode);
+        $query = $queryBuilder->getQuery();
+        $this->setHintsToQuery($query);
+
+        return $query->getResult($this->getHydrationMode());
     }
 
     /**
@@ -86,42 +135,13 @@ class DoctrineMatcherResult extends AbstractDoctrineMatcherResult
     }
 
     /**
-     * @return QueryBuilder
+     * @param Query $query
      */
-    public function getQueryBuilder()
+    protected function setHintsToQuery(Query $query)
     {
-        return $this->queryBuilder;
-    }
-
-    /**
-     * @return array
-     */
-    public function getOrderings()
-    {
-        return $this->orderings;
-    }
-
-    /**
-     * @return int
-     */
-    public function getFirstResult()
-    {
-        return $this->firstResult;
-    }
-
-    /**
-     * @return int
-     */
-    public function getMaxResults()
-    {
-        return $this->maxResults;
-    }
-
-    /**
-     * @return string
-     */
-    public function getAlias()
-    {
-        return $this->alias;
+        $queryHints = $this->getQueryHints();
+        foreach ($queryHints as $hintName => $hintValue) {
+            $query->setHint($hintName, $hintValue);
+        }
     }
 }
