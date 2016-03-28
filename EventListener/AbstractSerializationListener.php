@@ -5,10 +5,14 @@ namespace Glavweb\RestBundle\EventListener;
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\Common\Annotations\Reader;
 use Glavweb\CoreBundle\Mapping\Annotation\ImagineFilters;
+use Glavweb\UploaderBundle\Entity\Media;
+use Glavweb\UploaderBundle\Helper\MediaHelper;
 use JMS\Serializer\EventDispatcher\EventSubscriberInterface;
 use JMS\Serializer\EventDispatcher\ObjectEvent;
 use JMS\Serializer\EventDispatcher\PreSerializeEvent;
 use Liip\ImagineBundle\Templating\Helper\ImagineHelper;
+use Symfony\Bundle\FrameworkBundle\Templating\Helper\AssetsHelper;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Vich\UploaderBundle\Metadata\MetadataReader;
 use Vich\UploaderBundle\Templating\Helper\UploaderHelper;
 
@@ -22,6 +26,11 @@ abstract class AbstractSerializationListener implements EventSubscriberInterface
      * @var array
      */
     private static $cache;
+
+    /**
+     * @var AssetsHelper
+     */
+    protected $requestStack;
 
     /**
      * @var UploaderHelper
@@ -49,19 +58,28 @@ abstract class AbstractSerializationListener implements EventSubscriberInterface
     protected $annotationsReader;
 
     /**
+     * @var MediaHelper
+     */
+    protected $mediaHelper;
+
+    /**
+     * @param RequestStack   $requestStack
      * @param UploaderHelper $uploaderHelper
      * @param MetadataReader $metadataReader
-     * @param ImagineHelper $imagineHelper
-     * @param Registry $doctrine
-     * @param Reader $annotationsReader
+     * @param ImagineHelper  $imagineHelper
+     * @param Registry       $doctrine
+     * @param Reader         $annotationsReader
+     * @param MediaHelper    $mediaHelper
      */
-    public function __construct(UploaderHelper $uploaderHelper, MetadataReader $metadataReader, ImagineHelper $imagineHelper, Registry $doctrine, Reader $annotationsReader)
+    public function __construct(RequestStack $requestStack, UploaderHelper $uploaderHelper, MetadataReader $metadataReader, ImagineHelper $imagineHelper, Registry $doctrine, Reader $annotationsReader, MediaHelper $mediaHelper)
     {
+        $this->requestStack      = $requestStack;
         $this->uploaderHelper    = $uploaderHelper;
         $this->imagineHelper     = $imagineHelper;
         $this->metadataReader    = $metadataReader;
         $this->doctrine          = $doctrine;
         $this->annotationsReader = $annotationsReader;
+        $this->mediaHelper       = $mediaHelper;
     }
 
     /**
@@ -72,6 +90,7 @@ abstract class AbstractSerializationListener implements EventSubscriberInterface
         $entity    = $event->getObject();
         $type      = $event->getType();
         $className = $type['name'];
+        $request   = $this->requestStack->getCurrentRequest();
 
         $isUploadable = $this->metadataReader->isUploadable($className);
         if (!$isUploadable) {
@@ -94,7 +113,6 @@ abstract class AbstractSerializationListener implements EventSubscriberInterface
                 $setterFile = 'set' . $fileNameProperty;
                 $originUrl = $this->uploaderHelper->asset($entity, $propertyName);
 
-                $url = $originUrl;
                 if ($originUrl) {
                     /** @var ImagineFilters $imagineFiltersAnnotation */
                     $reflectionClass = new \ReflectionClass($className);
@@ -114,7 +132,73 @@ abstract class AbstractSerializationListener implements EventSubscriberInterface
                     }
                 }
 
-                $entity->$setterFile($url);
+                if ($request) {
+                    $originUrl = $request->getSchemeAndHttpHost() . $originUrl;
+                }
+
+                $entity->$setterFile($originUrl);
+            }
+        }
+    }
+
+    /**
+     * @param PreSerializeEvent $event
+     */
+    public function onPerSerializeGlavwebMediaFile(PreSerializeEvent $event)
+    {
+        $entity    = $event->getObject();
+        $type      = $event->getType();
+        $className = $type['name'];
+        $request   = $this->requestStack->getCurrentRequest();
+        $reflectionClass = new \ReflectionClass($className);
+
+        $media = array();
+
+        $classProperties = $reflectionClass->getProperties();
+        foreach ($classProperties as $property) {
+            $uploadableFieldAnnotation = $this->annotationsReader->getPropertyAnnotation(
+                $property,
+                'Glavweb\UploaderBundle\Mapping\Annotation\UploadableField'
+            );
+
+            if ($uploadableFieldAnnotation) {
+                /** @var ImagineFilters $imagineFiltersAnnotation */
+                $imagineFiltersAnnotation = $this->annotationsReader->getPropertyAnnotation(
+                    $property,
+                    'Glavweb\CoreBundle\Mapping\Annotation\ImagineFilters'
+                );
+
+                if (!$imagineFiltersAnnotation) {
+                    continue;
+                }
+                $imagineFilterProperty = $imagineFiltersAnnotation->getProperty();
+
+                $getter = 'get' . ucfirst($property->getName());
+                /** @var Media $item */
+                foreach ($entity->$getter() as $item) {
+                    $originUrl = null;
+                    $thumbnails = [];
+                    if ($item->getContentPath()) {
+                        $originUrl = $this->mediaHelper->getContentPath($item);
+
+                        foreach ($imagineFiltersAnnotation->getFilters() as $filter) {
+                            $thumbnails[$filter] = $this->imagineHelper->filter($originUrl, $filter);
+                        }
+                    }
+
+                    if ($request) {
+                        $originUrl = $request->getSchemeAndHttpHost() . $originUrl;
+                    }
+
+                    $media[] = array(
+                        'originUrl'   => $originUrl,
+                        'thumbnails'  => $thumbnails,
+                        'name'        => $item->getName(),
+                        'description' => $item->getDescription(),
+                    );
+                }
+
+                $entity->$imagineFilterProperty = $media;
             }
         }
     }
