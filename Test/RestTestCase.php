@@ -566,12 +566,12 @@ abstract class RestTestCase extends WebTestCase
 
         // Test cases
         $client = $this->getClient();
-        foreach ($cases as $fieldName => $case) {
+        foreach ($cases as $caseName => $case) {
             $values   = $case['values'];
             $expected = $case['expected'];
 
             $this->queryRequest($uri, $values);
-            $this->assertJsonResponse($client->getResponse(), 200, $expected, null, 'case: ' . $fieldName);
+            $this->assertJsonResponse($client->getResponse(), 200, $expected, null, 'case: ' . $caseName);
         }
     }
 

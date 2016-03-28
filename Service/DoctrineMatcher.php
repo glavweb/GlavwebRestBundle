@@ -3,6 +3,7 @@
 namespace Glavweb\RestBundle\Service;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
+use Doctrine\Common\Annotations\Reader;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityRepository;
@@ -13,9 +14,14 @@ use Doctrine\ORM\Query;
 use Doctrine\ORM\Query\Expr\Comparison;
 use Doctrine\ORM\Query\ResultSetMapping;
 use Doctrine\ORM\QueryBuilder;
+use Glavweb\RestBundle\Mapping\Annotation\Access;
+use Glavweb\RestBundle\Security\AccessHandler;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+use Symfony\Component\Security\Core\Authorization\AuthorizationChecker;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
 /**
  * Class DoctrineMatcher
@@ -36,6 +42,21 @@ class DoctrineMatcher
      * @var Registry
      */
     private $doctrine;
+
+    /**
+     * @var AccessHandler
+     */
+    private $accessHandler;
+
+    /**
+     * @var AuthorizationCheckerInterface
+     */
+    private $authorizationChecker;
+
+    /**
+     * @var TokenStorageInterface
+     */
+    private $tokenStorage;
 
     /**
      * @var array
@@ -59,11 +80,18 @@ class DoctrineMatcher
 
     /**
      * DoctrineMatcher constructor.
+     *
      * @param Registry $doctrine
+     * @param AccessHandler $accessHandler
+     * @param AuthorizationCheckerInterface $authorizationChecker
+     * @param TokenStorageInterface $tokenStorage
      */
-    public function __construct(Registry $doctrine)
+    public function __construct(Registry $doctrine, AccessHandler $accessHandler, AuthorizationCheckerInterface $authorizationChecker, TokenStorageInterface $tokenStorage)
     {
-        $this->doctrine = $doctrine;
+        $this->doctrine             = $doctrine;
+        $this->accessHandler        = $accessHandler;
+        $this->authorizationChecker = $authorizationChecker;
+        $this->tokenStorage         = $tokenStorage;
     }
 
     /**
@@ -197,6 +225,34 @@ class DoctrineMatcher
 
             } else {
                 $this->addFilter($queryBuilder, $classMetadata, $field, $value, $alias);
+            }
+        }
+
+        $class = $repository->getClassName();
+        $masterViewRole = $this->accessHandler->getRole($class, 'VIEW');
+
+        if (!$this->authorizationChecker->isGranted($masterViewRole)) {
+            $securityConditions = [];
+            $user = $this->tokenStorage->getToken()->getUser();
+
+            $additionalRoles = $this->accessHandler->getAdditionalRoles($class);
+            foreach ($additionalRoles as $additionalRoleName => $additionalRoleData) {
+                $role = $this->accessHandler->getRole($class, 'VIEW', $additionalRoleName);
+
+                if (isset($additionalRoleData['condition']) && $this->authorizationChecker->isGranted($role)) {
+                    $securityConditions[] = strtr($additionalRoleData['condition'], [
+                        '{{alias}}' => $alias,
+                        '{{user}}'  => $user->getId(),
+                    ]);
+                }
+            }
+
+            if (!$securityConditions) {
+                return null;
+
+            } else {
+                $expr = $queryBuilder->expr();
+                $queryBuilder->andWhere($expr->orX()->addMultiple($securityConditions));
             }
         }
 

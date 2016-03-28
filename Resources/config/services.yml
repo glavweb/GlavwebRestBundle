@@ -1,7 +1,32 @@
 services:
+    glavweb_rest.security_access_handler:
+        class:  Glavweb\RestBundle\Security\AccessHandler
+        arguments: [@annotation_reader]
+
+    glavweb_rest.security_access_rest_voter:
+        class:  Glavweb\RestBundle\Security\Authorization\Voter\RestVoter
+        arguments: [@doctrine, @glavweb_rest.security_access_handler]
+        public: false
+        tags:
+           - { name: security.voter }
+
+    glavweb_rest.editable_role_builder:
+        class: Glavweb\RestBundle\Security\EditableRolesBuilder
+        arguments: [@security.context, @doctrine, @glavweb_rest.security_access_handler, %security.role_hierarchy.roles%]
+
+    glavweb_rest.form_type_security_roles:
+        class: Glavweb\RestBundle\Form\SecurityRolesType
+        arguments: [@glavweb_rest.editable_role_builder]
+        tags:
+            - {name: form.type, alias: glavweb_security_roles}
+
+    glavweb_rest.admin_security_handler_role:
+        class: Glavweb\RestBundle\Admin\SecurityHandlerRole
+        arguments: [@security.context, @glavweb_rest.security_access_handler, [ROLE_SUPER_ADMIN]]
+
     glavweb_rest.doctrine_matcher:
         class: Glavweb\RestBundle\Service\DoctrineMatcher
-        arguments: [ @doctrine ]
+        arguments: [@doctrine, @glavweb_rest.security_access_handler, @security.authorization_checker, @security.token_storage]
 
     glavweb_rest.form_action:
         class: Glavweb\RestBundle\Action\RestFormAction
