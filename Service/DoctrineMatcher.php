@@ -14,6 +14,8 @@ use Doctrine\ORM\Query;
 use Doctrine\ORM\Query\Expr\Comparison;
 use Doctrine\ORM\Query\ResultSetMapping;
 use Doctrine\ORM\QueryBuilder;
+use Glavweb\RestBundle\Exception\Matcher\MatcherAccessDeniedException;
+use Glavweb\RestBundle\Exception\Matcher\MatcherException;
 use Glavweb\RestBundle\Mapping\Annotation\Access;
 use Glavweb\RestBundle\Security\AccessHandler;
 use Symfony\Component\Form\AbstractType;
@@ -22,6 +24,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\Authorization\AuthorizationChecker;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 
 /**
  * Class DoctrineMatcher
@@ -96,23 +99,28 @@ class DoctrineMatcher
 
     /**
      * @param EntityRepository $repository
-     * @param array            $fields
-     * @param array            $orderings
-     * @param int              $firstResult
-     * @param int              $maxResults
-     * @param string           $alias
+     * @param array $fields
+     * @param array $orderings
+     * @param int $firstResult
+     * @param int $maxResults
+     * @param string $alias
+     * @param bool $checkAccess
      * @return DoctrineMatcherResult
-     * @throws \Doctrine\DBAL\DBALException
      */
-    public function matching(EntityRepository $repository, array $fields = array(), array $orderings = null, $firstResult = 0, $maxResults = null, $alias = 't')
+    public function matching(EntityRepository $repository, array $fields = array(), array $orderings = null, $firstResult = 0, $maxResults = null, $alias = 't', $checkAccess = true)
     {
         $this->orderings   = $orderings;
         $this->firstResult = $firstResult;
         $this->maxResults  = $maxResults;
         $this->alias       = $alias;
 
-        $queryBuilder = $this->doMatching($repository, $fields, $alias);
-        $result = new DoctrineMatcherResult($queryBuilder, $orderings, $firstResult, $maxResults, $alias);
+        try {
+            $queryBuilder = $this->doMatching($repository, $fields, $alias, $checkAccess);
+            $result = new DoctrineMatcherResult($queryBuilder, $orderings, $firstResult, $maxResults, $alias);
+
+        } catch (MatcherException $e) {
+            $result = new MatcherEmptyResult();
+        }
 
         return $result;
     }
@@ -125,12 +133,13 @@ class DoctrineMatcher
      * @param int $maxResults
      * @param string $alias
      * @param $callback
+     * @param bool $checkAccess
      * @return DoctrineNativeSqlMatcherResult
      */
-    public function matchingNativeSql(EntityRepository $repository, array $fields = array(), array $orderings = null, $firstResult = 0, $maxResults = null, $alias = 't', $callback)
+    public function matchingNativeSql(EntityRepository $repository, array $fields = array(), array $orderings = null, $firstResult = 0, $maxResults = null, $alias = 't', $callback, $checkAccess = true)
     {
         $em           = $this->doctrine->getManager();
-        $queryBuilder = $this->doMatching($repository, $fields, 't');
+        $queryBuilder = $this->doMatching($repository, $fields, 't', $checkAccess);
         $subQuery     = $this->buildSql($queryBuilder);
         $rsm          = $this->createResultSetMapping($repository->getClassName(), $alias);
 
@@ -149,7 +158,12 @@ class DoctrineMatcher
         $this->maxResults  = $maxResults;
         $this->alias       = $alias;
 
-        $result = new DoctrineNativeSqlMatcherResult($query, $this->orderings, $firstResult, $maxResults);
+        try {
+            $result = new DoctrineNativeSqlMatcherResult($query, $this->orderings, $firstResult, $maxResults);
+
+        } catch (MatcherException $e) {
+            $result = new MatcherEmptyResult();
+        }
 
         return $result;
     }
@@ -178,12 +192,13 @@ class DoctrineMatcher
 
     /**
      * @param EntityRepository $repository
-     * @param array $fields
-     * @param string $alias
+     * @param array            $fields
+     * @param string           $alias
+     * @param bool             $checkAccess
      * @return QueryBuilder
      * @throws \Doctrine\ORM\Mapping\MappingException
      */
-    protected function doMatching(EntityRepository $repository, array $fields, $alias)
+    protected function doMatching(EntityRepository $repository, array $fields, $alias, $checkAccess)
     {
         /** @var ClassMetadata $classMetadata */
         $em = $this->doctrine->getManager();
@@ -228,32 +243,8 @@ class DoctrineMatcher
             }
         }
 
-        $class = $repository->getClassName();
-        $masterViewRole = $this->accessHandler->getRole($class, 'VIEW');
-
-        if (!$this->authorizationChecker->isGranted($masterViewRole)) {
-            $securityConditions = [];
-            $user = $this->tokenStorage->getToken()->getUser();
-
-            $additionalRoles = $this->accessHandler->getAdditionalRoles($class);
-            foreach ($additionalRoles as $additionalRoleName => $additionalRoleData) {
-                $role = $this->accessHandler->getRole($class, 'VIEW', $additionalRoleName);
-
-                if (isset($additionalRoleData['condition']) && $this->authorizationChecker->isGranted($role)) {
-                    $securityConditions[] = strtr($additionalRoleData['condition'], [
-                        '{{alias}}' => $alias,
-                        '{{user}}'  => $user->getId(),
-                    ]);
-                }
-            }
-
-            if (!$securityConditions) {
-                return null;
-
-            } else {
-                $expr = $queryBuilder->expr();
-                $queryBuilder->andWhere($expr->orX()->addMultiple($securityConditions));
-            }
+        if ($checkAccess) {
+            $this->filterAccess($queryBuilder, $repository, $alias);
         }
 
         return $queryBuilder;
@@ -346,10 +337,46 @@ class DoctrineMatcher
                 }
 
             } else {
-                $className = $classMetadata->getAssociationTargetClass($field);
-                $entity = $this->doctrine->getManager()->find($className, $value);
+                $queryBuilder->andWhere($expr->eq($alias . '.' . $field, $value));
+            }
+        }
+    }
 
-                $queryBuilder->andWhere($expr->eq($alias . '.' . $field, $entity->getId()));
+    /**
+     * @param QueryBuilder     $queryBuilder
+     * @param EntityRepository $repository
+     * @param string           $alias
+     * @throws MatcherAccessDeniedException
+     */
+    protected function filterAccess($queryBuilder, EntityRepository $repository, $alias)
+    {
+        $class = $repository->getClassName();
+        if ($this->accessHandler->hasAccessAnnotation($class)) {
+            $masterViewRole = $this->accessHandler->getRole($class, 'VIEW');
+
+            if (!$this->authorizationChecker->isGranted($masterViewRole)) {
+                $user = $this->tokenStorage->getToken()->getUser();
+
+                $securityConditions = [];
+                $additionalRoles = $this->accessHandler->getAdditionalRoles($class);
+                foreach ($additionalRoles as $additionalRoleName => $additionalRoleData) {
+                    $role = $this->accessHandler->getRole($class, 'VIEW', $additionalRoleName);
+
+                    if (isset($additionalRoleData['condition']) && $this->authorizationChecker->isGranted($role)) {
+                        $securityConditions[] = strtr($additionalRoleData['condition'], [
+                            '{{alias}}' => $alias,
+                            '{{user}}'  => $user->getId(),
+                        ]);
+                    }
+                }
+
+                if (!$securityConditions) {
+                    throw new MatcherAccessDeniedException();
+
+                } else {
+                    $expr = $queryBuilder->expr();
+                    $queryBuilder->andWhere($expr->orX()->addMultiple($securityConditions));
+                }
             }
         }
     }
