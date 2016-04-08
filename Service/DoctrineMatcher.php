@@ -497,7 +497,7 @@ class DoctrineMatcher
             }
         }
 
-        $uniqueAlias = uniqid();
+        $uniqueAlias = 'a_' . uniqid();
         $sql = 'SELECT ' . $uniqueAlias . '.* FROM (' . $query->getSQL() . ') as ' . $uniqueAlias;
 
         if ($whereParts) {
