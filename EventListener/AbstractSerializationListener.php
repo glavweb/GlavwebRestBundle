@@ -174,8 +174,14 @@ abstract class AbstractSerializationListener implements EventSubscriberInterface
                 $imagineFilterProperty = $imagineFiltersAnnotation->getProperty();
 
                 $getter = 'get' . ucfirst($property->getName());
+                $items = $entity->$getter();
+
+                if (!is_array($items) && !$items instanceof \Traversable) {
+                    continue;
+                }
+
                 /** @var Media $item */
-                foreach ($entity->$getter() as $item) {
+                foreach ($items as $item) {
                     $originUrl = null;
                     $thumbnails = [];
                     if ($item->getContentPath()) {
