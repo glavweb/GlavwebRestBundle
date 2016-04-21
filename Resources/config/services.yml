@@ -24,10 +24,6 @@ services:
         class: Glavweb\RestBundle\Admin\SecurityHandlerRole
         arguments: [@security.context, @glavweb_rest.security_access_handler, [ROLE_SUPER_ADMIN]]
 
-    glavweb_rest.doctrine_matcher:
-        class: Glavweb\RestBundle\Service\DoctrineMatcher
-        arguments: [@doctrine, @glavweb_rest.security_access_handler, @security.authorization_checker, @security.token_storage]
-
     glavweb_rest.form_action:
         class: Glavweb\RestBundle\Action\RestFormAction
         calls:
