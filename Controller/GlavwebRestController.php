@@ -2,19 +2,19 @@
 
 namespace Glavweb\RestBundle\Controller;
 
-use Doctrine\ORM\AbstractQuery;
-use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityRepository;
-use Doctrine\ORM\Query\ResultSetMapping;
 use FOS\RestBundle\Controller\FOSRestController;
-use FOS\RestBundle\Request\ParamFetcherInterface;
 use FOS\RestBundle\View\View;
+use Glavweb\DatagridBundle\Datagrid\DatagridInterface;
+use Glavweb\DatagridBundle\JoinMap\Doctrine\JoinMap;
+use Glavweb\RestBundle\Scope\ScopeExclusionStrategy;
+use Glavweb\RestBundle\Scope\ScopeYamlLoader;
 use Glavweb\RestBundle\Service\AbstractDoctrineMatcherResult;
-use Glavweb\RestBundle\Service\DoctrineMatcherResult;
 use JMS\Serializer\Exclusion\GroupsExclusionStrategy;
 use JMS\Serializer\SerializationContext;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Config\FileLocator;
 
 /**
  * Class GlavwebRestController
@@ -72,23 +72,37 @@ class GlavwebRestController extends FOSRestController
     protected function getScopesByRequest(Request $request, $paramName = '_scope')
     {
         $scopes = array_map('trim', explode(',', $this->getRestParam($request, $paramName)));
-        $scopes = array_merge($scopes, [GroupsExclusionStrategy::DEFAULT_GROUP]);
 
         return $scopes;
     }
 
     /**
      * @param Request $request
-     * @param bool $enableMaxDepthChecks
-     * @return SerializationContext
+     * @return array
      */
-    protected function getSerializationContext(Request $request, $enableMaxDepthChecks = true)
+    protected function getScopeConfig(Request $request)
     {
         $scopes = $this->getScopesByRequest($request);
 
-        $serializationContext = SerializationContext::create()
-            ->setGroups(array_merge($scopes, [GroupsExclusionStrategy::DEFAULT_GROUP]))
-        ;
+        $locationDir = $this->getParameter('kernel.root_dir') . '/config/scopes';
+        $scopeLoader = new ScopeYamlLoader(new FileLocator($locationDir));
+
+        foreach ($scopes as $scope) {
+            $scopeLoader->load($scope . '.yml');
+        }
+
+        return $scopeLoader->getConfiguration();
+    }
+
+    /**
+     * @param array $scopeConfig
+     * @param bool  $enableMaxDepthChecks
+     * @return SerializationContext
+     */
+    protected function getScopeSerializationContext(array $scopeConfig, $enableMaxDepthChecks = false)
+    {
+        $serializationContext = SerializationContext::create();
+        $serializationContext->addExclusionStrategy(new ScopeExclusionStrategy($scopeConfig));
 
         if ($enableMaxDepthChecks) {
             $serializationContext->enableMaxDepthChecks();
@@ -118,6 +132,26 @@ class GlavwebRestController extends FOSRestController
     }
 
     /**
+     * @param AbstractDoctrineMatcherResult $datagrid
+     * @param SerializationContext          $serializationContext
+     * @param string                        $statusCode
+     * @param array                         $headers
+     * @return View
+     */
+    protected function createViewByDatagrid(DatagridInterface $datagrid, SerializationContext $serializationContext, $statusCode = null, array $headers = array())
+    {
+        $offset = $datagrid->getFirstResult();
+        $limit  = $datagrid->getMaxResults();
+
+        $view = $this->view($datagrid->getList(), $statusCode, $headers);
+        $this->setContentRangeHeader($view, $offset, $limit, $datagrid->getTotal());
+
+        return $view
+            ->setSerializationContext($serializationContext)
+        ;
+    }
+
+    /**
      * @param string $class
      * @return EntityRepository
      */
@@ -130,5 +164,67 @@ class GlavwebRestController extends FOSRestController
         }
 
         throw new \RuntimeException('Repository class must be instance of EntityRepository.');
+    }
+
+    /**
+     * @param array $scopeConfig
+     * @param string $alias
+     * @return JoinMap
+     */
+    protected function createJoinMapByScopeConfig(array $scopeConfig, $alias)
+    {
+        $joinMap = new JoinMap($alias);
+
+        $joins = $this->getJoinsByScopeConfig($scopeConfig, $alias);
+        foreach ($joins as $fullPath => $joinData) {
+            $pathElements = explode('.', $fullPath);
+            $field = array_pop($pathElements);
+            $path  = implode('.', $pathElements);
+
+            if (($key = array_search($path, $joins)) !== false) {
+                $path = $key;
+            }
+
+            $joinFields = $joinData['fields'];
+            $joinMap->join($path, $field, true, $joinFields);
+        }
+
+        return $joinMap;
+    }
+
+    /**
+     * @param array $scopeConfig
+     * @param string $firstAlias
+     * @param string $alias
+     * @param array $result
+     * @return array
+     */
+    protected function getJoinsByScopeConfig(array $scopeConfig, $firstAlias, $alias = null, &$result = [])
+    {
+        if (!$alias) {
+            $alias = $firstAlias;
+        }
+
+        foreach ($scopeConfig as $key => $value) {
+            if (is_array($value)) {
+                $join       = $alias . '.' . $key;
+                $joinAlias  = str_replace('.', '_', $join);
+                $joinFields = array_filter($value, function ($value) {
+                    return !is_array($value);
+                });
+                $joinFields = array_keys($joinFields);
+                
+                $result[$join] = [
+                    'alias'  => $joinAlias,
+                    'fields' => $joinFields
+                ];
+
+                $alias = $joinAlias;
+                $this->getJoinsByScopeConfig($value, $firstAlias, $alias, $result);
+                $alias = $firstAlias;
+            }
+        }
+
+        return $result;
     }
 }

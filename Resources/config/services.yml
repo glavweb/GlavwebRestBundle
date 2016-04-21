@@ -58,3 +58,9 @@ services:
     glavweb_rest.patch_action_determiner:
         class: Glavweb\RestBundle\Determiner\Action\PatchActionDeterminer
         arguments: ["@glavweb_rest.test_determiner_handler"]
+
+    # Scope
+    glavweb_rest.scope_yaml_loader:
+        class:  Glavweb\RestBundle\Scope\ScopeYamlLoader
+        arguments: ["@doctrine", "@glavweb_rest.security_access_handler"]
+
