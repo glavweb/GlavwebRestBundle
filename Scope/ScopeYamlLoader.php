@@ -83,6 +83,9 @@ class ScopeYamlLoader extends FileLoader
         }
     }
 
+    /**
+     * @return array
+     */
     public function getConfiguration()
     {
         return $this->configuration;
