@@ -3,18 +3,10 @@
 namespace Glavweb\RestBundle\Security;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
-use Doctrine\Common\Annotations\Reader;
-use Doctrine\Common\Inflector\Inflector;
 use Doctrine\ORM\Mapping\ClassMetadata;
-use Symfony\Component\Security\Core\SecurityContextInterface;
 
 class EditableRolesBuilder
 {
-    /**
-     * @var SecurityContextInterface
-     */
-    protected $securityContext;
-
     /**
      * @var
      */
@@ -31,15 +23,13 @@ class EditableRolesBuilder
     protected $rolesHierarchy;
 
     /**
-     * @param SecurityContextInterface $securityContext
      * @param Registry $doctrine
      * @param AccessHandler $accessHandler
      * @param array $rolesHierarchy
      * @internal param Reader $annotationReader
      */
-    public function __construct(SecurityContextInterface $securityContext, Registry $doctrine, AccessHandler $accessHandler, array $rolesHierarchy = [])
+    public function __construct(Registry $doctrine, AccessHandler $accessHandler, array $rolesHierarchy = [])
     {
-        $this->securityContext = $securityContext;
         $this->doctrine        = $doctrine;
         $this->accessHandler   = $accessHandler;
         $this->rolesHierarchy  = $rolesHierarchy;

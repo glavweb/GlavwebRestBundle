@@ -2,13 +2,11 @@
 
 namespace Glavweb\RestBundle\Admin;
 
-use Doctrine\Common\Annotations\Reader;
-use Doctrine\Common\Util\Inflector;
 use Glavweb\RestBundle\Security\AccessHandler;
 use Sonata\AdminBundle\Admin\AdminInterface;
 use Sonata\AdminBundle\Security\Handler\SecurityHandlerInterface;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationCredentialsNotFoundException;
-use Symfony\Component\Security\Core\SecurityContextInterface;
 
 /**
  * Class SecurityHandlerRole
@@ -17,9 +15,9 @@ use Symfony\Component\Security\Core\SecurityContextInterface;
 class SecurityHandlerRole implements SecurityHandlerInterface
 {
     /**
-     * @var SecurityContextInterface
+     * @var AuthorizationCheckerInterface
      */
-    protected $securityContext;
+    protected $authorizationChecker;
 
     /**
      * @var AccessHandler
@@ -44,14 +42,13 @@ class SecurityHandlerRole implements SecurityHandlerInterface
     ];
 
     /**
-     * @param \Symfony\Component\Security\Core\SecurityContextInterface $securityContext
+     * @param AuthorizationCheckerInterface $authorizationChecker
      * @param AccessHandler $accessHandler
      * @param array $superAdminRoles
-     * @internal param Reader $annotationReader
      */
-    public function __construct(SecurityContextInterface $securityContext, AccessHandler $accessHandler, array $superAdminRoles)
+    public function __construct(AuthorizationCheckerInterface $authorizationChecker, AccessHandler $accessHandler, array $superAdminRoles)
     {
-        $this->securityContext = $securityContext;
+        $this->authorizationChecker = $authorizationChecker;
         $this->superAdminRoles = $superAdminRoles;
         $this->accessHandler   = $accessHandler;
     }
@@ -72,8 +69,8 @@ class SecurityHandlerRole implements SecurityHandlerInterface
 
         try {
             return 
-                $this->securityContext->isGranted($this->superAdminRoles) ||
-                $this->securityContext->isGranted($attributes, $object)
+                $this->authorizationChecker->isGranted($this->superAdminRoles) ||
+                $this->authorizationChecker->isGranted($attributes, $object)
             ;
             
         } catch (AuthenticationCredentialsNotFoundException $e) {
