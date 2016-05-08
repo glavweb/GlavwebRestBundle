@@ -81,6 +81,7 @@ class GlavwebRestController extends FOSRestController
     {
         $scopes = $this->getScopesByRequest($request);
 
+        // @todo replace to "%glavweb_rest.scope_dir"
         $locationDir = $this->getParameter('kernel.root_dir') . '/config/scopes';
         $scopeLoader = new ScopeYamlLoader(new FileLocator($locationDir));
 

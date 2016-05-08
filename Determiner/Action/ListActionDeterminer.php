@@ -2,103 +2,61 @@
 
 namespace Glavweb\RestBundle\Determiner\Action;
 
-use FOS\RestBundle\Controller\Annotations\QueryParam;
-use FOS\RestBundle\Request\ParamReaderInterface;
-use Glavweb\RestBundle\Determiner\DeterminerHandler;
-use Symfony\Component\Routing\RouterInterface;
+use Glavweb\DatagridBundle\Filter\Doctrine\Filter;
 
 /**
  * Class ListActionDeterminer
  * @package Glavweb\RestBundle\Determiner\Action
  */
-class ListActionDeterminer
+class ListActionDeterminer extends AbstractViewActionDeterminer
 {
-    /**
-     * @var DeterminerHandler
-     */
-    protected $determinerHandler;
-
-    /**
-     * @var RouterInterface
-     */
-    protected $router;
-
-    /**
-     * @var ParamReaderInterface
-     */
-    protected $paramFetcherReader;
-
     /**
      * @var array
      */
-    private $models = [];
+    private $filters;
 
     /**
-     * ListActionDeterminer constructor.
-     *
-     * @param DeterminerHandler $determinerHandler
-     * @param RouterInterface $router
-     * @param ParamReaderInterface $paramFetcherReader
-     */
-    public function __construct(DeterminerHandler $determinerHandler, RouterInterface $router, ParamReaderInterface $paramFetcherReader)
-    {
-        $this->determinerHandler  = $determinerHandler;
-        $this->router             = $router;
-        $this->paramFetcherReader = $paramFetcherReader;
-    }
-
-    /**
-     * @param array $models
+     * @param array $filters
      * @return $this
      */
-    public function setModels($models)
+    public function setFilters(array $filters = [])
     {
-        $this->models = $models;
+        $this->filters = $filters;
 
         return $this;
     }
 
     /**
-     * @param string $uri
      * @return array
      */
-    public function determineCases($uri)
+    public function determineCases()
     {
-        $filters = $this->getFilters($uri);
+        $model = $this->model;
+        if (!method_exists($model, 'getId')) {
+            throw new \RuntimeException('Model should implement "getId" method.');
+        }
+        $modelId = $model->getId();
 
-        $cases = [];
-        foreach ($this->models as $model) {
-            if (!method_exists($model, 'getId')) {
-                throw new \RuntimeException('Model should implement "getId" method.');
-            }
+        $filters = $this->filters;
+        $cases   = [];
+        foreach ($filters as $filterName => $filterValue) {
+            // Filter positive
+            $cases[$filterName] = [
+                'values'    => [$filterName => $filterValue],
+                'expected' => [
+                    ['id' => $modelId]
+                ]
+            ];
 
-            $modelId = $model->getId();
-            $values = $this->getEntityData($model);
-            foreach ($values as $fieldName => $value) {
-                if (!isset($filters[$fieldName])) {
-                    continue;
-                }
+            // Filter negative
+            list($operator, $value) = Filter::guessOperator($filterValue);
+            $negativeOperator = $this->getNegativeOperator($operator);
 
-                if ($value instanceof \DateTime) {
-                    $value = $value->format('c');
-                }
-                $value = '=' . $value;
-
-                $key = null;
-                if (isset($cases[$fieldName])) {
-                    $key = $this->findValueInCase($cases[$fieldName], $value);
-                }
-
-                if (!$key) {
-                    $cases[$fieldName] = [
-                        'values'    => [$fieldName => $value],
-                        'expected' => [
-                            ['id' => $modelId]
-                        ]
-                    ];
-                } else {
-                    $cases[$fieldName][$key]['expected'][] = ['id' => $modelId];
-                }
+            if ($negativeOperator) {
+                $cases['negative_' . $filterName] = [
+                    'values'   => [$filterName => $negativeOperator . $value],
+                    'expected' => []
+                ];
             }
         }
 
@@ -106,67 +64,32 @@ class ListActionDeterminer
     }
 
     /**
-     * @param string $uri
-     * @return array
+     * @param string $operator
+     * @return string|null
      */
-    private function getFilters($uri)
+    private function getNegativeOperator($operator)
     {
-        $restParams = $this->getRestParams($uri);
+        $negativeOperators = [
+            Filter::EQ           => Filter::NEQ,
+            Filter::NEQ          => Filter::EQ,
+            
+            Filter::GT           => Filter::LT,
+            Filter::LT           => Filter::GT,
+            
+            Filter::GTE          => Filter::LTE,
+            Filter::LTE          => Filter::GTE,
+            
+            Filter::IN           => Filter::NIN,
+            Filter::NIN          => Filter::IN,
+            
+            Filter::CONTAINS     => Filter::NOT_CONTAINS,
+            Filter::NOT_CONTAINS => Filter::CONTAINS,
+        ];
 
-        return array_map(function ($restParam) {
-            /** @var QueryParam $restParam */
-            return $restParam->name;
-        }, $restParams);
-    }
-
-    /**
-     * @param string $uri
-     * @return QueryParam[]
-     */
-    private function getRestParams($uri)
-    {
-        $routeParams = $this->router->match($uri);
-        list($controller, $method) = explode('::', $routeParams['_controller']);
-
-        $restParams = $this->paramFetcherReader->read(
-            new \ReflectionClass($controller),
-            $method
-        );
-
-        return $restParams;
-    }
-
-    /**
-     * @param array $modelsValues
-     * @param string $value
-     * @return int|null|string
-     */
-    private function findValueInCase(array $modelsValues, $value)
-    {
-        foreach ($modelsValues as $key => $data) {
-            if ($modelsValues['value'] == $value) {
-                return $key;
-            }
+        if (!isset($negativeOperators[$operator])) {
+            return null;
         }
-
-        return null;
-    }
-
-    /**
-     * @param array $model
-     * @return array
-     */
-    private function getEntityData($model)
-    {
-        $modelClass = get_class($model);
-        $fields = $this->determinerHandler->getFields($modelClass);
-
-        $data = [];
-        foreach ($fields as $fieldName => $fieldType) {
-            $getter = 'get' . ucfirst($fieldName);
-            $data[$fieldName] = $model->$getter();
-        }
-
-        return $data;
+        
+        return $negativeOperators[$operator];
     }
 }

@@ -44,11 +44,11 @@ services:
 
     glavweb_rest.view_action_determiner:
         class: Glavweb\RestBundle\Determiner\Action\ViewActionDeterminer
-        arguments: ["@glavweb_rest.test_determiner_handler", "@doctrine"]
+        arguments: ["@glavweb_rest.test_determiner_handler", "@doctrine", "@router", "@nelmio_api_doc.extractor.api_doc_extractor", "%glavweb_rest.scope_dir%"]
 
     glavweb_rest.list_action_determiner:
         class: Glavweb\RestBundle\Determiner\Action\ListActionDeterminer
-        arguments: ["@glavweb_rest.test_determiner_handler", "@router", "@fos_rest.request.param_fetcher.reader"]
+        arguments: ["@router", "@nelmio_api_doc.extractor.api_doc_extractor", "%glavweb_rest.scope_dir%"]
 
     glavweb_rest.update_action_determiner:
         class: Glavweb\RestBundle\Determiner\Action\UpdateActionDeterminer

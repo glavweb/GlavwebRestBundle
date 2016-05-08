@@ -526,46 +526,65 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
-     * @param string $uri
-     * @param array $expected
      * @param ViewActionDeterminer $determiner
+     * @param array $additionalExpected
      */
-    public function assertViewRestAction($uri, array $expected, ViewActionDeterminer $determiner = null)
+    public function assertViewRestActionByDeterminer(ViewActionDeterminer $determiner, array $additionalExpected = [])
     {
         // View
         $client = $this->getClient();
-        $this->queryRequest($uri);
 
-        $determineExpected = [];
-        if ($determiner) {
-            $determineExpected = $determiner->determineExpected();
+        $scopes = $determiner->getScopes();
+        foreach ($scopes as $scope) {
+            $this->queryRequest($determiner->getUri(['_scope' => $scope]));
+
+            // Test scope stricture
+            $scopeConfig = $determiner->getScopeConfig($scope);
+            $data = $this->getResponseData();
+
+            // assert scope structure
+            $this->assertDataForScopeConfig($data, $scopeConfig);
+
+            // assert data
+            $determineExpected = $determiner->determineExpected($scope);
+            $expected = array_merge($determineExpected, $additionalExpected);
+            $this->assertJsonResponse($client->getResponse(), 200, $expected);
         }
-
-        $expected = array_merge($determineExpected, $expected);
-        $this->assertJsonResponse($client->getResponse(), 200, $expected);
     }
 
     /**
-     * @param string $uri
-     * @param array $cases
      * @param ListActionDeterminer $determiner
+     * @param array $additionalCases
      */
-    public function assertListRestAction($uri, array $cases, ListActionDeterminer $determiner = null)
+    public function assertListRestActionByDeterminer(ListActionDeterminer $determiner, array $additionalCases = [])
     {
-        $determineCases = [];
-        if ($determiner) {
-            $determineCases = $determiner->determineCases($uri);
+        $client = $this->getClient();
+
+        // Test list output (list scope)
+        $scopes = $determiner->getScopes();
+        foreach ($scopes as $scope) {
+            $this->queryRequest($determiner->getUri(['_scope' => $scope]));
+
+            // Test scope stricture
+            $scopeConfig = $determiner->getScopeConfig($scope);
+            $data = $this->getResponseData();
+
+            if (!isset($data[0])) {
+                $this->assertTrue(false, 'Data not found.');
+            }
+
+            // assert scope structure
+            $this->assertDataForScopeConfig($data[0], $scopeConfig);
         }
 
-        $cases = array_merge($determineCases, $cases);
+        $determineCases = $determiner->determineCases();
+        $cases = array_merge($determineCases, $additionalCases);
         $cases = array_filter($cases, function ($item) {
             return (bool)$item;
         });
 
-        // Test list output (list scope)
-
         // Test cases
-        $client = $this->getClient();
+        $uri = $determiner->getUri();
         foreach ($cases as $caseName => $case) {
             $values   = $case['values'];
             $expected = $case['expected'];
@@ -668,5 +687,42 @@ abstract class RestTestCase extends WebTestCase
         }
 
         return true;
+    }
+
+    /**
+     * @param array $data
+     * @param array $scopeConfig
+     * @return void
+     */
+    protected function assertDataForScopeConfig(array $data, array $scopeConfig)
+    {
+        $diff = array_diff_key($scopeConfig, $data);
+
+        if ($diff) {
+            $this->assertTrue(false, sprintf('Result data have differences "%s" with scope config', implode(', ', array_keys($diff))));
+            return;
+        }
+
+        foreach ($data as $key => $value) {
+            if (!isset($scopeConfig[$key])) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                if (empty($value)) {
+                    $this->assertTrue(false, sprintf('No result data for "%s" in scope config.', $key));
+                    return;
+                }
+
+                $toMany = isset($value[0]);
+                if ($toMany) {
+                    $value = $value[0];
+                }
+
+                $this->assertDataForScopeConfig($value, $scopeConfig[$key]);
+            }
+        }
+
+        $this->assertTrue(true);
     }
 }

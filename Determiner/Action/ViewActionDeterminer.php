@@ -5,12 +5,14 @@ namespace Glavweb\RestBundle\Determiner\Action;
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\ORM\UnitOfWork;
 use Glavweb\RestBundle\Determiner\DeterminerHandler;
+use Nelmio\ApiDocBundle\Extractor\ApiDocExtractor;
+use Symfony\Bundle\FrameworkBundle\Routing\Router;
 
 /**
  * Class ViewActionDeterminer
  * @package Glavweb\RestBundle\Determiner\Action
  */
-class ViewActionDeterminer
+class ViewActionDeterminer extends AbstractViewActionDeterminer
 {
     /**
      * @var DeterminerHandler
@@ -23,78 +25,40 @@ class ViewActionDeterminer
     protected $doctrine;
 
     /**
-     * @var object
-     */
-    protected $model;
-
-    /**
-     * @var string
-     */
-    protected $modelClass;
-
-    /**
-     * @var string
-     */
-    protected $viewScope;
-
-    /**
      * ViewActionDeterminer constructor.
      *
      * @param DeterminerHandler $determinerHandler
      * @param Registry $doctrine
+     * @param Router $router
+     * @param ApiDocExtractor $apiDocExtractor
+     * @param string $scopeDir
      */
-    public function __construct(DeterminerHandler $determinerHandler, Registry $doctrine)
+    public function __construct(DeterminerHandler $determinerHandler, Registry $doctrine, Router $router, ApiDocExtractor $apiDocExtractor, $scopeDir)
     {
+        parent::__construct($router, $apiDocExtractor, $scopeDir);
+
         $this->determinerHandler = $determinerHandler;
         $this->doctrine          = $doctrine;
     }
 
     /**
-     * @param object $model
-     * @return $this
-     */
-    public function setModel($model)
-    {
-        $this->model      = $model;
-        $this->modelClass = get_class($model);
-
-        return $this;
-    }
-
-    /**
      * @param string $scope
-     * @return $this
-     */
-    public function setViewScope($scope)
-    {
-        $this->viewScope = $scope;
-
-        return $this;
-    }
-
-    /**
      * @return array
      */
-    public function determineExpected()
+    public function determineExpected($scope)
     {
         /** @var UnitOfWork $uow */
         $uow = $this->doctrine->getManager()->getUnitOfWork();
         $values = $uow->getOriginalEntityData($this->model);
 
         $handler = $this->determinerHandler;
-        $fields           = $handler->getFields($this->modelClass);
-        $associations     = $handler->getAssociations($this->modelClass);
-        $serializerGroups = $handler->getSerializerGroups($this->modelClass);
+        $fields       = $handler->getFields($this->modelClass);
+        $associations = $handler->getAssociations($this->modelClass);
+        $scopeConfig  = $this->getScopeConfig($scope);
 
         $expectedValuesForTest = [];
         foreach ($values as $fieldName => $value) {
-            $isViewScope =
-                $this->viewScope &&
-                isset($serializerGroups[$fieldName]) &&
-                in_array($this->viewScope, $serializerGroups[$fieldName])
-            ;
-
-            if (!$isViewScope) {
+            if (!array_key_exists($fieldName, $scopeConfig)) {
                 continue;
             }
 
