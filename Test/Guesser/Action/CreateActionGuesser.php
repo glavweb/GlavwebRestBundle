@@ -1,22 +1,22 @@
 <?php
 
-namespace Glavweb\RestBundle\Determiner\Action;
+namespace Glavweb\RestBundle\Test\Guesser\Action;
 
-use Glavweb\RestBundle\Determiner\DeterminerHandler;
-use Glavweb\RestBundle\Determiner\ValueUtil;
+use Glavweb\RestBundle\Test\Guesser\GuesserHandler;
+use Glavweb\RestBundle\Test\Guesser\ValueUtil;
 use Glavweb\RestBundle\Faker\FileFaker;
 use Symfony\Component\Form\FormTypeInterface;
 
 /**
- * Class CreateActionDeterminer
- * @package Glavweb\RestBundle\Determiner
+ * Class CreateActionGuesser
+ * @package Glavweb\RestBundle\Test\Guesser
  */
-class CreateActionDeterminer
+class CreateActionGuesser
 {
     /**
-     * @var DeterminerHandler
+     * @var GuesserHandler
      */
-    protected $determinerHandler;
+    protected $guesserHandler;
 
     /**
      * @var FileFaker
@@ -49,14 +49,14 @@ class CreateActionDeterminer
     protected $viewScope;
 
     /**
-     * PostActionDeterminer constructor.
+     * PostActionGuesser constructor.
      *
-     * @param DeterminerHandler $determinerHandler
+     * @param GuesserHandler $guesserHandler
      * @param FileFaker $fileFaker
      */
-    public function __construct(DeterminerHandler $determinerHandler, FileFaker $fileFaker)
+    public function __construct(GuesserHandler $guesserHandler, FileFaker $fileFaker)
     {
-        $this->determinerHandler = $determinerHandler;
+        $this->guesserHandler = $guesserHandler;
         $this->fileFaker         = $fileFaker;
     }
 
@@ -109,11 +109,11 @@ class CreateActionDeterminer
     /**
      * @return array
      */
-    public function determineValues()
+    public function guessValues()
     {
         $this->checkVariables();
 
-        $handler = $this->determinerHandler;
+        $handler = $this->guesserHandler;
         $fields        = $handler->getFields($this->modelClass);
         $formElements  = $handler->getFormElements($this->modelClass, $this->formType);
         $fixtureValues = $handler->getFixtureValues($this->modelClass, $this->fixturePath, $this->fixtureKey);
@@ -153,9 +153,9 @@ class CreateActionDeterminer
     /**
      * @return array
      */
-    public function determineFiles()
+    public function guessFiles()
     {
-        $handler = $this->determinerHandler;
+        $handler = $this->guesserHandler;
         $formElements  = $handler->getFormElements($this->modelClass, $this->formType);
 
         $filesForTest = [];
@@ -174,9 +174,9 @@ class CreateActionDeterminer
      * @param array $values
      * @return array
      */
-    public function determineExpected(array $values)
+    public function guessExpected(array $values)
     {
-        $handler = $this->determinerHandler;
+        $handler = $this->guesserHandler;
         $fields           = $handler->getFields($this->modelClass);
         $associations     = $handler->getAssociations($this->modelClass);
         $serializerGroups = $handler->getSerializerGroups($this->modelClass);

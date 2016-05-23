@@ -1,14 +1,14 @@
 <?php
 
-namespace Glavweb\RestBundle\Determiner\Action;
+namespace Glavweb\RestBundle\Test\Guesser\Action;
 
 use Glavweb\DatagridBundle\Filter\Doctrine\Filter;
 
 /**
- * Class ListActionDeterminer
- * @package Glavweb\RestBundle\Determiner\Action
+ * Class ListActionGuesser
+ * @package Glavweb\RestBundle\Test\Guesser\Action
  */
-class ListActionDeterminer extends AbstractViewActionDeterminer
+class ListActionGuesser extends AbstractViewActionGuesser
 {
     /**
      * @var array
@@ -29,7 +29,7 @@ class ListActionDeterminer extends AbstractViewActionDeterminer
     /**
      * @return array
      */
-    public function determineCases()
+    public function guessCases()
     {
         $model = $this->model;
         if (!method_exists($model, 'getId')) {

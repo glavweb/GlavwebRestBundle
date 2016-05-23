@@ -1,21 +1,21 @@
 <?php
 
-namespace Glavweb\RestBundle\Determiner\Action;
+namespace Glavweb\RestBundle\Test\Guesser\Action;
 
-use Glavweb\RestBundle\Determiner\DeterminerHandler;
-use Glavweb\RestBundle\Determiner\ValueUtil;
+use Glavweb\RestBundle\Test\Guesser\GuesserHandler;
+use Glavweb\RestBundle\Test\Guesser\ValueUtil;
 use Symfony\Component\Form\FormTypeInterface;
 
 /**
- * Class UpdateActionDeterminer
- * @package Glavweb\RestBundle\Determiner\Action
+ * Class UpdateActionGuesser
+ * @package Glavweb\RestBundle\Test\Guesser\Action
  */
-class UpdateActionDeterminer
+class UpdateActionGuesser
 {
     /**
-     * @var DeterminerHandler
+     * @var GuesserHandler
      */
-    protected $determinerHandler;
+    protected $guesserHandler;
 
     /**
      * @var object
@@ -38,13 +38,13 @@ class UpdateActionDeterminer
     protected $viewScope;
 
     /**
-     * PostActionDeterminer constructor.
+     * PostActionGuesser constructor.
      *
-     * @param DeterminerHandler $determinerHandler
+     * @param GuesserHandler $guesserHandler
      */
-    public function __construct(DeterminerHandler $determinerHandler)
+    public function __construct(GuesserHandler $guesserHandler)
     {
-        $this->determinerHandler = $determinerHandler;
+        $this->guesserHandler = $guesserHandler;
     }
 
     /**
@@ -84,9 +84,9 @@ class UpdateActionDeterminer
     /**
      * @return array
      */
-    public function determineValues()
+    public function guessValues()
     {
-        $handler = $this->determinerHandler;
+        $handler = $this->guesserHandler;
         $fields        = $handler->getFields($this->modelClass);
         $formElements  = $handler->getFormElements($this->modelClass, $this->formType);
 
@@ -126,9 +126,9 @@ class UpdateActionDeterminer
      * @param array $values
      * @return array
      */
-    public function determineExpected(array $values)
+    public function guessExpected(array $values)
     {
-        $handler = $this->determinerHandler;
+        $handler = $this->guesserHandler;
         $fields           = $handler->getFields($this->modelClass);
         $associations     = $handler->getAssociations($this->modelClass);
         $serializerGroups = $handler->getSerializerGroups($this->modelClass);

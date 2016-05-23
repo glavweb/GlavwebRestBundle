@@ -9,5 +9,4 @@ use Symfony\Component\HttpKernel\Bundle\Bundle;
  * @package Glavweb\RestBundle
  */
 class GlavwebRestBundle extends Bundle
-{
-}
+{}

@@ -1,6 +1,6 @@
 <?php
 
-namespace Glavweb\RestBundle\Determiner\Action;
+namespace Glavweb\RestBundle\Test\Guesser\Action;
 
 use Glavweb\RestBundle\Scope\ScopeYamlLoader;
 use Nelmio\ApiDocBundle\Extractor\ApiDocExtractor;
@@ -8,10 +8,10 @@ use Symfony\Bundle\FrameworkBundle\Routing\Router;
 use Symfony\Component\Config\FileLocator;
 
 /**
- * Class AbstractActionDeterminer
- * @package Glavweb\RestBundle\Determiner\Action
+ * Class AbstractActionGuesser
+ * @package Glavweb\RestBundle\Test\Guesser\Action
  */
-abstract class AbstractViewActionDeterminer
+abstract class AbstractViewActionGuesser
 {
     /**
      * @var Router
@@ -64,7 +64,7 @@ abstract class AbstractViewActionDeterminer
     protected $controllerInfo = null;
 
     /**
-     * ViewActionDeterminer constructor.
+     * ViewActionGuesser constructor.
      *
      * @param Router $router
      * @param ApiDocExtractor $apiDocExtractor

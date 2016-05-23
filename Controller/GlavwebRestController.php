@@ -6,8 +6,11 @@ use Doctrine\ORM\EntityRepository;
 use FOS\RestBundle\Controller\FOSRestController;
 use FOS\RestBundle\View\View;
 use Glavweb\DatagridBundle\Datagrid\DatagridInterface;
-use Glavweb\RestBundle\Scope\ScopeExclusionStrategy;
-use Glavweb\RestBundle\Scope\ScopeYamlLoader;
+use Glavweb\DatagridBundle\JoinMap\Doctrine\JoinMap;
+use Glavweb\DataSchemaBundle\DataSchema\DataSchema;
+use Glavweb\DataSchemaBundle\Loader\Yaml\DataSchemaYamlLoader;
+use Glavweb\DataSchemaBundle\Loader\Yaml\ScopeYamlLoader;
+use Glavweb\RestBundle\Serializer\ScopeExclusionStrategy;
 use JMS\Serializer\SerializationContext;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -62,74 +65,6 @@ class GlavwebRestController extends FOSRestController
     }
 
     /**
-     * @param Request $request
-     * @param string $paramName
-     * @return array
-     */
-    protected function getScopesByRequest(Request $request, $paramName = '_scope')
-    {
-        $scopes = array_map('trim', explode(',', $this->getRestParam($request, $paramName)));
-
-        return $scopes;
-    }
-
-    /**
-     * @param Request $request
-     * @return array
-     */
-    protected function getScopeConfig(Request $request)
-    {
-        $scopes = $this->getScopesByRequest($request);
-
-        // @todo replace to "%glavweb_rest.scope_dir"
-        $locationDir = $this->getParameter('kernel.root_dir') . '/config/scopes';
-        $scopeLoader = new ScopeYamlLoader(new FileLocator($locationDir));
-
-        foreach ($scopes as $scope) {
-            $scopeLoader->load($scope . '.yml');
-        }
-
-        return $scopeLoader->getConfiguration();
-    }
-
-    /**
-     * @param array $scopeConfig
-     * @param bool  $enableMaxDepthChecks
-     * @return SerializationContext
-     */
-    protected function getScopeSerializationContext(array $scopeConfig, $enableMaxDepthChecks = false)
-    {
-        $serializationContext = SerializationContext::create();
-        $serializationContext->addExclusionStrategy(new ScopeExclusionStrategy($scopeConfig));
-
-        if ($enableMaxDepthChecks) {
-            $serializationContext->enableMaxDepthChecks();
-        }
-
-        return $serializationContext;
-    }
-
-    /**
-     * @param DatagridInterface    $datagrid
-     * @param SerializationContext $serializationContext
-     * @param string               $statusCode
-     * @param array                $headers
-     * @return View
-     */
-    protected function createViewByDatagrid(DatagridInterface $datagrid, SerializationContext $serializationContext, $statusCode = null, array $headers = array())
-    {
-        $offset = $datagrid->getFirstResult();
-        $limit  = $datagrid->getMaxResults();
-
-        $view = $this->view($datagrid->getList(), $statusCode, $headers);
-        $this->setContentRangeHeader($view, $offset, $limit, $datagrid->getTotal());
-
-        return $view
-            ->setSerializationContext($serializationContext)
-        ;
-    }
-
-    /**
      * @param string $class
      * @return EntityRepository
      */
@@ -142,5 +77,22 @@ class GlavwebRestController extends FOSRestController
         }
 
         throw new \RuntimeException('Repository class must be instance of EntityRepository.');
+    }
+
+    /**
+     * @param DatagridInterface $datagrid
+     * @param string            $statusCode
+     * @param array             $headers
+     * @return View
+     */
+    protected function createListViewByDatagrid(DatagridInterface $datagrid, $statusCode = null, array $headers = array())
+    {
+        $offset = $datagrid->getFirstResult();
+        $limit  = $datagrid->getMaxResults();
+
+        $view = $this->view($datagrid->getList(), $statusCode, $headers);
+        $this->setContentRangeHeader($view, $offset, $limit, $datagrid->getTotal());
+
+        return $view;
     }
 }

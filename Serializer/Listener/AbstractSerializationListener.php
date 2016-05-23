@@ -1,6 +1,6 @@
 <?php
 
-namespace Glavweb\RestBundle\EventListener;
+namespace Glavweb\RestBundle\Serializer\Listener;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\Common\Annotations\Reader;

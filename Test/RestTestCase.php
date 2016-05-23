@@ -2,19 +2,17 @@
 
 namespace Glavweb\RestBundle\Test;
 
-use Glavweb\RestBundle\Determiner\Action\CreateActionDeterminer;
-use Glavweb\RestBundle\Determiner\Action\ListActionDeterminer;
-use Glavweb\RestBundle\Determiner\Action\PatchActionDeterminer;
-use Glavweb\RestBundle\Determiner\Action\PostActionDeterminer;
-use Glavweb\RestBundle\Determiner\Action\PutActionDeterminer;
-use Glavweb\RestBundle\Determiner\Action\UpdateActionDeterminer;
-use Glavweb\RestBundle\Determiner\Action\ViewActionDeterminer;
-use Glavweb\RestBundle\Transformer\TestDataTransformer;
-use Glavweb\RestBundle\Util\FileUtil;
+use Glavweb\RestBundle\Test\Authenticate\AuthenticateResponse;
+use Glavweb\RestBundle\Test\Authenticate\AuthenticatorInterface;
+use Glavweb\RestBundle\Test\Guesser\Action\CreateActionGuesser;
+use Glavweb\RestBundle\Test\Guesser\Action\ListActionGuesser;
+use Glavweb\RestBundle\Test\Guesser\Action\PatchActionGuesser;
+use Glavweb\RestBundle\Test\Guesser\Action\UpdateActionGuesser;
+use Glavweb\RestBundle\Test\Guesser\Action\ViewActionGuesser;
+use Glavweb\RestBundle\Test\Transformer\DataTransformer;
 use Liip\FunctionalTestBundle\Test\WebTestCase;
 use Symfony\Bundle\FrameworkBundle\Client;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpKernel\Bundle\BundleInterface;
 
 /**
  * Class RestTestCase
@@ -22,22 +20,15 @@ use Symfony\Component\HttpKernel\Bundle\BundleInterface;
  */
 abstract class RestTestCase extends WebTestCase
 {
-    const MODE_CHECK_FIRST = 'check_first';
-
     /**
-     * @var Client|null
+     * @var array
      */
-    private static $storedClient = null;
+    private static $authenticateResponseCache = [];
 
     /**
      * @var array
      */
-    private static $storedAuthenticateResponse = [];
-
-    /**
-     * @var array
-     */
-    private static $storedFixtureObjects = [];
+    private static $fixtureObjectsCache = [];
 
     /**
      * @var Client
@@ -45,154 +36,16 @@ abstract class RestTestCase extends WebTestCase
     protected $client;
 
     /**
-     * @var array
+     * @var AuthenticateResponse
      */
-    protected $authenticateResponse = array();
-
-    /**
-     * @var bool
-     */
-    protected $useStored = false;
+    protected $authenticateResponse;
 
     /**
      * Set Up
      */
     public function setUp()
     {
-        if ($this->useStored) {
-            $client = $this->getStoredClient();
-
-        } else {
-            $client = $this->createCurrentClient();
-        }
-
-        $this->client = $client;
-    }
-
-    /**
-     * @return Client
-     */
-    protected function createCurrentClient()
-    {
-        $container = $this->getContainer();
-        $environment = $container->get('kernel')->getEnvironment();
-        $httpHost    = $container->getParameter('http_host');
-
-        return static::createClient(array(
-            'environment' => $environment,
-            'debug'       => false,
-        ), ['HTTP_HOST' => $httpHost]);
-    }
-
-    /**
-     * @param string $username
-     * @param string $password
-     * @return array
-     */
-    public function authenticate($username, $password)
-    {
-        if ($this->useStored) {
-            $authenticateResponse = $this->getStoredAuthenticateResponse($username, $password);
-
-        } else {
-            $authenticateResponse = $this->doAuthenticate($username, $password);
-        }
-
-        return $this->authenticateResponse = $authenticateResponse;
-    }
-
-    /**
-     * @param array $fixtureFiles
-     * @param bool $append
-     * @param string $username
-     * @param string $password
-     * @return array
-     */
-    protected function loadFixturesAndAuthenticate($fixtureFiles = [], $append = false, $username = 'admin', $password = 'qwerty')
-    {
-        if ($this->useStored) {
-            $objects = $this->getStoredFixtureFiles($fixtureFiles, $append);
-
-        } else {
-            $objects = $this->loadFixtureFiles($fixtureFiles, $append);
-        }
-
-        if ($username !== null) {
-            $this->authenticate($username, $password);
-        }
-
-        return $objects;
-    }
-
-    /**
-     * @param string $username
-     * @param string $password
-     * @return array
-     */
-    private function doAuthenticate($username, $password)
-    {
-        $this->client->request('POST', '/api/sign-in', array(
-            'username' => $username,
-            'password' => $password
-        ), array(), array('HTTP_ACCEPT' => 'application/json'));
-        $loginResponse = json_decode($this->client->getResponse()->getContent());
-
-        $authenticateResponse = array(
-            'token'    => (isset($loginResponse->apiToken) ? $loginResponse->apiToken : null),
-            'expireAt' => (isset($loginResponse->createdAt) ? $loginResponse->createdAt : null),
-            'username' => (isset($loginResponse->login) ? $loginResponse->login : null)
-        );
-
-        return $authenticateResponse;
-    }
-
-    /**
-     * @return Client
-     */
-    protected function getStoredClient()
-    {
-        if (!self::$storedClient) {
-            self::$storedClient = $this->createCurrentClient();
-        }
-
-        return self::$storedClient;
-    }
-
-    /**
-     * @param $username
-     * @param $password
-     * @return array
-     */
-    public function getStoredAuthenticateResponse($username, $password)
-    {
-        $cacheKey = md5($username . '_' . $password);
-        if (!isset(self::$storedAuthenticateResponse[$cacheKey])) {
-            self::$storedAuthenticateResponse[$cacheKey] = $this->doAuthenticate($username, $password);
-        }
-
-        return self::$storedAuthenticateResponse[$cacheKey];
-    }
-
-    /**
-     * @param $fixtureFiles
-     * @param $append
-     * @return array
-     */
-    public function getStoredFixtureFiles($fixtureFiles, $append)
-    {
-        $cacheKey = md5(implode('__' , $fixtureFiles) . '__' . (int)$append);
-        if (!isset(self::$storedFixtureObjects[$cacheKey])) {
-            self::$storedFixtureObjects[$cacheKey] = $this->loadFixtureFiles($fixtureFiles, $append);
-            self::$storedAuthenticateResponse = []; // @todo ugly solution
-
-        } else {
-            $em = $this->getContainer()->get('doctrine')->getManager();
-            foreach (self::$storedFixtureObjects[$cacheKey] as $model) {
-                $em->persist($model);
-            }
-        }
-
-        return self::$storedFixtureObjects[$cacheKey];
+        $this->client = $this->createCurrentClient();
     }
 
     /**
@@ -204,12 +57,94 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
+     * @return Client
+     */
+    protected function createCurrentClient()
+    {
+        $container   = $this->getContainer();
+        $environment = $container->get('kernel')->getEnvironment();
+        
+        // @todo replace to bundle config
+        $httpHost    = $container->getParameter('http_host');
+
+        return static::createClient([
+            'environment' => $environment,
+            'debug'       => false,
+        ], ['HTTP_HOST' => $httpHost]);
+    }
+
+    /**
+     * @param array  $fixtureFiles
+     * @param string $additionalCacheKey
+     * @param bool   $append
+     * @param string $omName
+     * @param string $registryName
+     * @return mixed
+     */
+    protected function loadCachedFixtureFiles(array $fixtureFiles, $additionalCacheKey, $append = false, $omName = null, $registryName = 'doctrine')
+    {
+        $cacheKey = md5(implode('__' , $fixtureFiles) . '__' . (int)$append) . '__' . $additionalCacheKey;
+        if (!isset(self::$fixtureObjectsCache[$cacheKey])) {
+            self::$fixtureObjectsCache[$cacheKey] = $this->loadFixtureFiles($fixtureFiles, $append, $omName, $registryName);
+        }
+
+        return self::$fixtureObjectsCache[$cacheKey];
+    }
+
+    /**
+     * @return void
+     */
+    public function clearFixtureCache()
+    {
+        self::$fixtureObjectsCache = [];
+    }
+
+    /**
+     * @param AuthenticatorInterface $authenticator
+     * @param bool|false $useCache
+     * @return AuthenticateResponse
+     */
+    public function authenticate(AuthenticatorInterface $authenticator, $useCache = false)
+    {
+        if ($useCache) {
+            $authenticateResponse = $this->getCachedAuthenticateResponse($authenticator);
+
+        } else {
+            $authenticateResponse = $authenticator->authenticate();
+        }
+
+        return $this->authenticateResponse = $authenticateResponse;
+    }
+
+    /**
+     * @param AuthenticatorInterface $authenticator
+     * @return mixed
+     */
+    protected function getCachedAuthenticateResponse(AuthenticatorInterface $authenticator)
+    {
+        $cacheKey = $authenticator->getCacheKey();
+        if (!isset(self::$authenticateResponseCache[$cacheKey])) {
+            self::$authenticateResponseCache[$cacheKey] = $authenticator->authenticate();
+        }
+
+        return self::$authenticateResponseCache[$cacheKey];
+    }
+
+    /**
+     * @return void
+     */
+    public function clearAuthenticateCache()
+    {
+        self::$authenticateResponseCache = [];
+    }
+
+    /**
      * @param string $url
      * @param array $data
      */
-    public function queryRequest($url, array $data = [])
+    public function sendQueryRestRequest($url, array $data = [])
     {
-        $this->restRequest('GET', $url, $data);
+        $this->sendRestRequest('GET', $url, $data);
     }
 
     /**
@@ -217,76 +152,79 @@ abstract class RestTestCase extends WebTestCase
      * @param array $data
      * @param array $files
      */
-    public function createRequest($url, array $data = [], array $files = [])
+    public function sendCreateRestRequest($url, array $data = [], array $files = [])
     {
-        $this->restRequest('POST', $url, $data, $files);
+        $this->sendRestRequest('POST', $url, $data, $files);
     }
 
     /**
      * @param string $url
      * @param array $data
      */
-    public function updateRequest($url, array $data = [])
+    public function sendUpdateRestRequest($url, array $data = [])
     {
-        $this->restRequest('PUT', $url, $data);
+        $this->sendRestRequest('PUT', $url, $data);
     }
 
     /**
      * @param string $url
      * @param array $data
      */
-    public function patchRequest($url, array $data = [])
+    public function sendPatchRestRequest($url, array $data = [])
     {
-        $this->restRequest('PATCH', $url, $data);
+        $this->sendRestRequest('PATCH', $url, $data);
     }
 
     /**
      * @param string $url
      * @param array $data
      */
-    public function deleteRequest($url, array $data = [])
+    public function sendDeleteRestRequest($url, array $data = [])
     {
-        $this->restRequest('DELETE', $url, $data);
+        $this->sendRestRequest('DELETE', $url, $data);
     }
 
     /**
      * @param string $url
      * @param array $data
      */
-    public function linkRequest($url, array $data = [])
+    public function sendLinkRestRequest($url, array $data = [])
     {
-        $this->restRequest('LINK', $url, $data);
+        $this->sendRestRequest('LINK', $url, $data);
     }
 
     /**
      * @param string $url
      * @param array $data
      */
-    public function unlinkRequest($url, array $data = [])
+    public function sendUnlinkRestRequest($url, array $data = [])
     {
-        $this->restRequest('UNLINK', $url, $data);
+        $this->sendRestRequest('UNLINK', $url, $data);
     }
 
     /**
      * @param string $method
      * @param string $url
-     * @param array $data
+     * @param array $parameters
      * @param array $files
      */
-    public function restRequest($method, $url, array $data, array $files = [])
+    public function sendRestRequest($method, $url, array $parameters, array $files = [])
     {
+        $authenticateResponse = $this->authenticateResponse;
+        $authenticateParameters = $authenticateResponse->getParameters();
+        $authenticateHeaders    = $authenticateResponse->getHeaders();
+
         $this->client->request($method, $url,
-            $data,
+            array_merge($authenticateParameters, $parameters),
             $files,
-            array_merge($this->authenticateResponse, [
-//                'Content-Type' => 'multipart/form-data',
+            array_merge($authenticateHeaders, [
                 'HTTP_ACCEPT' => 'application/json',
             ])
         );
     }
 
     /**
-     * @return mixed
+     * @return array
      */
     public function getResponseData()
     {
@@ -337,65 +275,6 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
-     * @return string
-     */
-    public function getSourceClass()
-    {
-        $testClass  = get_class($this);
-        $restClass  = null;
-        $bundleName = $this->getBundleName($testClass);
-
-        $prefixTestsPath = $bundleName . '\\Tests';
-        $pos = strpos($testClass, $prefixTestsPath);
-        if ($pos === 0) {
-            $testClass = substr($testClass, strlen($prefixTestsPath));
-
-            if (substr($testClass, -4) == 'Test') {
-                $restClass = $bundleName . substr($testClass, 0, -4);
-            }
-        }
-
-        return $restClass;
-    }
-
-    /**
-     * @param string $class
-     * @return string|null
-     */
-    public function getBundleName($class)
-    {
-        $kernel = $this->getContainer()->get('kernel');
-
-        foreach ($kernel->getBundles() as $bundle) {
-            /** @var BundleInterface $bundle */
-            if (strpos($class, $bundle->getNamespace() . '\\') === 0) {
-                return $bundle->getName();
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param Response $response
-     * @param array $expectedData
-     * @return bool
-     */
-    public function findInJsonResponse(Response $response, array $expectedData = array())
-    {
-        $actualJson = $response->getContent();
-
-        $actualData = json_decode($actualJson, true);
-        foreach ($actualData as $actualItem) {
-            if ($this->findDataInItem($actualItem, $expectedData)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
      * Asserts that two given JSON encoded objects or arrays are equal.
      *
      * @param string $expectedJson
@@ -410,7 +289,7 @@ abstract class RestTestCase extends WebTestCase
         $expected = json_decode($expectedJson, true);
         $actual   = json_decode($actualJson, true);
 
-        $dataTransformer = new TestDataTransformer($expected, $actual);
+        $dataTransformer = new DataTransformer($expected, $actual);
         $expected = $dataTransformer->getExpectedData();
         $actual   = $dataTransformer->getActualData();
 
@@ -424,7 +303,7 @@ abstract class RestTestCase extends WebTestCase
      * @param string $mode
      * @param null $message
      */
-    public function assertJsonResponse(Response $response, $statusCode = 200, array $expectedData = array(), $mode = null, $message = null)
+    public function assertJsonResponse(Response $response, $statusCode = 200, array $expectedData = [], $mode = null, $message = null)
     {
         $actualJson = $response->getContent();
 
@@ -444,8 +323,8 @@ abstract class RestTestCase extends WebTestCase
         if ($expectedData) {
             $actualData = json_decode($actualJson, true);
 
-            $dataTransformer = new TestDataTransformer($expectedData, $actualData);
-            if ($mode == self::MODE_CHECK_FIRST) {
+            $dataTransformer = new DataTransformer($expectedData, $actualData);
+            if ($mode == DataTransformer::MODE_CHECK_FIRST) {
                 $dataTransformer->setModeCheckFirst(true);
             }
 
@@ -461,135 +340,107 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
-     * Asserts that the HTTP response code of the last request performed by
-     * $client matches the expected code. If not, raises an error with more
-     * information.
-     *
-     * @param $expectedStatusCode
-     * @param Client $client
-     */
-    public function assertStatusCode($expectedStatusCode, Client $client)
-    {
-        self::assertEquals($expectedStatusCode, $client->getResponse()->getStatusCode(), $client->getResponse()->getContent());
-    }
-
-    /**
-     * @param string $url
-     * @param string $expectedContentType
-     * @param array  $thumbnails
-     */
-    public function assertContentTypeUploadedFile($url, $expectedContentType, array $thumbnails = [])
-    {
-        $actualContentType = FileUtil::getFileContentType($this->getAbsoluteUri($url));
-        $this->assertEquals($expectedContentType, $actualContentType);
-
-        foreach ($thumbnails as $thumbnailUrl) {
-            $this->assertContentTypeUploadedFile($thumbnailUrl, $expectedContentType);
-        }
-    }
-
-    /**
      * @param string $uri
      * @param array $values
      * @param array $files
      * @param array $expected
-     * @param CreateActionDeterminer $determiner
+     * @param CreateActionGuesser $guesser
      */
-    public function assertCreateRestAction($uri, array $values, array $files, array $expected, CreateActionDeterminer $determiner = null)
+    public function assertCreateRestAction($uri, array $values, array $files, array $expected, CreateActionGuesser $guesser = null)
     {
-        $determineValues = [];
-        $determineFiles  = [];
-        if ($determiner) {
-            $determineValues = $determiner->determineValues();
-            $determineFiles  = $determiner->determineFiles();
+        $guessValues = [];
+        $guessFiles  = [];
+        if ($guesser) {
+            $guessValues = $guesser->guessValues();
+            $guessFiles  = $guesser->guessFiles();
         }
 
-        $values = array_merge($determineValues, $values);
-        $files = array_merge($determineFiles, $files);
+        $values = array_merge($guessValues, $values);
+        $files = array_merge($guessFiles, $files);
 
         // Create
         $client = $this->getClient();
-        $this->createRequest($uri, $values, $files);
+        $this->sendCreateRestRequest($uri, $values, $files);
         $this->assertStatusCode(201, $client);
 
         // Get
         $apiViewUrl = $client->getResponse()->headers->get('Location');
-        $this->queryRequest($apiViewUrl);
+        $this->sendQueryRestRequest($apiViewUrl);
 
-        $determineExpected = [];
-        if ($determiner) {
-            $determineExpected = $determiner->determineExpected($values);
+        $guessExpected = [];
+        if ($guesser) {
+            $guessExpected = $guesser->guessExpected($values);
         }
-        $expected = array_merge($determineExpected, $expected);
+        $expected = array_merge($guessExpected, $expected);
 
         $this->assertJsonResponse($client->getResponse(), 200, $expected);
     }
 
     /**
-     * @param ViewActionDeterminer $determiner
+     * @param ViewActionGuesser $guesser
      * @param array $additionalExpected
      */
-    public function assertViewRestActionByDeterminer(ViewActionDeterminer $determiner, array $additionalExpected = [])
+    public function assertViewRestActionByGuesser(ViewActionGuesser $guesser, array $additionalExpected = [])
     {
-        // View
         $client = $this->getClient();
 
-        $scopes = $determiner->getScopes();
+        $scopes = $guesser->getScopes();
         foreach ($scopes as $scope) {
-            $this->queryRequest($determiner->getUri(['_scope' => $scope]));
+            $this->sendQueryRestRequest($guesser->getUri(['_scope' => $scope]));
+            $this->assertStatusCode(200, $client);
 
             // Test scope stricture
-            $scopeConfig = $determiner->getScopeConfig($scope);
+            $scopeConfig = $guesser->getScopeConfig($scope);
             $data = $this->getResponseData();
 
             // assert scope structure
-            $this->assertDataForScopeConfig($data, $scopeConfig);
+            $this->assertDataStructure($data, $scopeConfig);
 
             // assert data
-            $determineExpected = $determiner->determineExpected($scope);
-            $expected = array_merge($determineExpected, $additionalExpected);
+            $guessExpected = $guesser->guessExpected($scope);
+            $expected = array_merge($guessExpected, $additionalExpected);
             $this->assertJsonResponse($client->getResponse(), 200, $expected);
         }
     }
 
     /**
-     * @param ListActionDeterminer $determiner
+     * @param ListActionGuesser $guesser
      * @param array $additionalCases
      */
-    public function assertListRestActionByDeterminer(ListActionDeterminer $determiner, array $additionalCases = [])
+    public function assertListRestActionByGuesser(ListActionGuesser $guesser, array $additionalCases = [])
     {
         $client = $this->getClient();
 
         // Test list output (list scope)
-        $scopes = $determiner->getScopes();
+        $scopes = $guesser->getScopes();
         foreach ($scopes as $scope) {
-            $this->queryRequest($determiner->getUri(['_scope' => $scope]));
+            $this->sendQueryRestRequest($guesser->getUri(['_scope' => $scope]));
+            $this->assertStatusCode(200, $client);
 
             // Test scope stricture
-            $scopeConfig = $determiner->getScopeConfig($scope);
+            $scopeConfig = $guesser->getScopeConfig($scope);
             $data = $this->getResponseData();
 
             if (!isset($data[0])) {
                 $this->assertTrue(false, 'Data not found.');
             }
 
-            // assert scope structure
-            $this->assertDataForScopeConfig($data[0], $scopeConfig);
+            $this->assertDataStructure($data[0], $scopeConfig);
         }
 
-        $determineCases = $determiner->determineCases();
-        $cases = array_merge($determineCases, $additionalCases);
+        $guessCases = $guesser->guessCases();
+        $cases = array_merge($guessCases, $additionalCases);
         $cases = array_filter($cases, function ($item) {
             return (bool)$item;
         });
 
         // Test cases
-        $uri = $determiner->getUri();
+        $uri = $guesser->getUri();
         foreach ($cases as $caseName => $case) {
             $values   = $case['values'];
             $expected = $case['expected'];
 
-            $this->queryRequest($uri, $values);
+            $this->sendQueryRestRequest($uri, $values);
             $this->assertJsonResponse($client->getResponse(), 200, $expected, null, 'case: ' . $caseName);
         }
     }
@@ -598,29 +449,29 @@ abstract class RestTestCase extends WebTestCase
      * @param string $uri
      * @param array $values
      * @param array $expected
-     * @param UpdateActionDeterminer $determiner
+     * @param UpdateActionGuesser $guesser
      */
-    public function assertUpdateRestAction($uri, array $values, array $expected = [], UpdateActionDeterminer $determiner = null)
+    public function assertUpdateRestAction($uri, array $values, array $expected = [], UpdateActionGuesser $guesser = null)
     {
-        $determineValues = [];
-        if ($determiner) {
-            $determineValues = $determiner->determineValues();
+        $guessValues = [];
+        if ($guesser) {
+            $guessValues = $guesser->guessValues();
         }
-        $values = array_merge($determineValues, $values);
+        $values = array_merge($guessValues, $values);
 
         // Update
         $client = $this->getClient();
-        $this->updateRequest($uri, $values);
+        $this->sendUpdateRestRequest($uri, $values);
         $this->assertStatusCode(200, $client);
 
         // Get
-        $this->queryRequest($uri);
+        $this->sendQueryRestRequest($uri);
 
-        $determineExpected = [];
-        if ($determiner) {
-            $determineExpected = $determiner->determineExpected($values);
+        $guessExpected = [];
+        if ($guesser) {
+            $guessExpected = $guesser->guessExpected($values);
         }
-        $expected = array_merge($determineExpected, $expected);
+        $expected = array_merge($guessExpected, $expected);
 
         $this->assertJsonResponse($client->getResponse(), 200, $expected);
     }
@@ -628,16 +479,16 @@ abstract class RestTestCase extends WebTestCase
     /**
      * @param string $uri
      * @param array $cases
-     * @param PatchActionDeterminer $determiner
+     * @param PatchActionGuesser $guesser
      */
-    public function assertPatchRestAction($uri, array $cases, PatchActionDeterminer $determiner = null)
+    public function assertPatchRestAction($uri, array $cases, PatchActionGuesser $guesser = null)
     {
-        $determineCases = [];
-        if ($determiner) {
-            $determineCases = $determiner->determineCases();
+        $guessCases = [];
+        if ($guesser) {
+            $guessCases = $guesser->guessCases();
         }
 
-        $cases = array_merge($determineCases, $cases);
+        $cases = array_merge($guessCases, $cases);
         $cases = array_filter($cases, function ($item) {
             return (bool)$item;
         });
@@ -648,9 +499,9 @@ abstract class RestTestCase extends WebTestCase
         foreach ($cases as $case) {
             $values   = $case['values'];
             $expected = $case['expected'];
-            $this->patchRequest($uri, $values);
+            $this->sendPatchRestRequest($uri, $values);
 
-            $this->queryRequest($uri);
+            $this->sendQueryRestRequest($uri);
             $this->assertJsonResponse($client->getResponse(), 200, $expected);
         }
     }
@@ -661,32 +512,11 @@ abstract class RestTestCase extends WebTestCase
     public function assertDeleteRestAction($uri)
     {
         $client = $this->getClient();
-        $this->deleteRequest($uri);
+        $this->sendDeleteRestRequest($uri);
         $this->assertStatusCode(204, $client);
 
-        $this->queryRequest($uri);
+        $this->sendQueryRestRequest($uri);
         $this->assertStatusCode(404, $client);
-    }
-
-    /**
-     * @param $actualItem
-     * @param $expectedData
-     * @return bool
-     */
-    private function findDataInItem($actualItem, $expectedData)
-    {
-        foreach ($expectedData as $expectedItemName => $expectedItemValue) {
-            $isExist =
-                isset($actualItem[$expectedItemName]) &&
-                $actualItem[$expectedItemName] == $expectedItemValue
-            ;
-
-            if (!$isExist) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**
@@ -694,7 +524,7 @@ abstract class RestTestCase extends WebTestCase
      * @param array $scopeConfig
      * @return void
      */
-    protected function assertDataForScopeConfig(array $data, array $scopeConfig)
+    protected function assertDataStructure(array $data, array $scopeConfig)
     {
         $diff = array_diff_key($scopeConfig, $data);
 
@@ -719,7 +549,7 @@ abstract class RestTestCase extends WebTestCase
                     $value = $value[0];
                 }
 
-                $this->assertDataForScopeConfig($value, $scopeConfig[$key]);
+                $this->assertDataStructure($value, $scopeConfig[$key]);
             }
         }
 

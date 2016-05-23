@@ -1,14 +1,14 @@
 <?php
 
-namespace Glavweb\RestBundle\Determiner;
+namespace Glavweb\RestBundle\Test\Guesser;
 
 use Doctrine\Common\Inflector\Inflector;
 use Doctrine\DBAL\Types\Type;
 use Fresh\DoctrineEnumBundle\DBAL\Types\AbstractEnumType;
 
 /**
- * Class DetermineValueUtil
- * @package Glavweb\RestBundle\Determiner
+ * Class ValueUtil
+ * @package Glavweb\RestBundle\Test\Guesser
  */
 class ValueUtil
 {

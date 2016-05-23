@@ -1,6 +1,6 @@
 <?php
 
-namespace Glavweb\RestBundle\Determiner;
+namespace Glavweb\RestBundle\Test\Guesser;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use JMS\Serializer\Metadata\Driver\DoctrineTypeDriver;
@@ -11,10 +11,10 @@ use Symfony\Component\HttpKernel\KernelInterface;
 use Nelmio\Alice\Fixtures\Parser\Methods\Yaml as YamlMethod;
 
 /**
- * Class DeterminerHandler
- * @package Glavweb\RestBundle\Determiner
+ * Class GuesserHandler
+ * @package Glavweb\RestBundle\Test\Guesser
  */
-class DeterminerHandler
+class GuesserHandler
 {
     /**
      * @var array

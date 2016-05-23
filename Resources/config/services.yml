@@ -34,32 +34,50 @@ services:
         class: Glavweb\RestBundle\Faker\FileFaker
         arguments: ["@kernel", "%kernel.root_dir%"]
 
-    glavweb_rest.test_determiner_handler:
-        class: Glavweb\RestBundle\Determiner\DeterminerHandler
+    glavweb_rest.test_guesser_handler:
+        class: Glavweb\RestBundle\Test\Guesser\GuesserHandler
         arguments: ["@kernel", "@doctrine", "@form.factory", "@jms_serializer.metadata.doctrine_type_driver"]
 
-    glavweb_rest.create_action_determiner:
-        class: Glavweb\RestBundle\Determiner\Action\CreateActionDeterminer
-        arguments: ["@glavweb_rest.test_determiner_handler", "@glavweb_rest.file_faker"]
+    glavweb_rest.create_action_guesser:
+        class: Glavweb\RestBundle\Test\Guesser\Action\CreateActionGuesser
+        arguments: ["@glavweb_rest.test_guesser_handler", "@glavweb_rest.file_faker"]
 
-    glavweb_rest.view_action_determiner:
-        class: Glavweb\RestBundle\Determiner\Action\ViewActionDeterminer
-        arguments: ["@glavweb_rest.test_determiner_handler", "@doctrine", "@router", "@nelmio_api_doc.extractor.api_doc_extractor", "%glavweb_rest.scope_dir%"]
+    glavweb_rest.test.view_action_guesser:
+        class: Glavweb\RestBundle\Test\Guesser\Action\ViewActionGuesser
+        arguments: ["@glavweb_rest.test_guesser_handler", "@doctrine", "@router", "@nelmio_api_doc.extractor.api_doc_extractor", "%glavweb_datagrid.scope_dir%"]
 
-    glavweb_rest.list_action_determiner:
-        class: Glavweb\RestBundle\Determiner\Action\ListActionDeterminer
-        arguments: ["@router", "@nelmio_api_doc.extractor.api_doc_extractor", "%glavweb_rest.scope_dir%"]
+    glavweb_rest.test.list_action_guesser:
+        class: Glavweb\RestBundle\Test\Guesser\Action\ListActionGuesser
+        arguments: ["@router", "@nelmio_api_doc.extractor.api_doc_extractor", "%glavweb_datagrid.scope_dir%"]
 
-    glavweb_rest.update_action_determiner:
-        class: Glavweb\RestBundle\Determiner\Action\UpdateActionDeterminer
-        arguments: ["@glavweb_rest.test_determiner_handler"]
+    glavweb_rest.update_action_guesser:
+        class: Glavweb\RestBundle\Test\Guesser\Action\UpdateActionGuesser
+        arguments: ["@glavweb_rest.test_guesser_handler"]
 
-    glavweb_rest.patch_action_determiner:
-        class: Glavweb\RestBundle\Determiner\Action\PatchActionDeterminer
-        arguments: ["@glavweb_rest.test_determiner_handler"]
+    glavweb_rest.patch_action_guesser:
+        class: Glavweb\RestBundle\Test\Guesser\Action\PatchActionGuesser
+        arguments: ["@glavweb_rest.test_guesser_handler"]
+
+    # DataSchemaa
+    glavweb_rest.api_doc.data_schema_parser:
+        class: Glavweb\RestBundle\ApiDoc\Parser\DataSchemaParser
+        arguments: ["@glavweb_datagrid.data_schema_factory", "%glavweb_datagrid.data_schema_dir%"]
+        tags:
+            - { name: nelmio_api_doc.extractor.parser, priority: 1 }
 
     # Scope
-    glavweb_rest.scope_yaml_loader:
-        class:  Glavweb\RestBundle\Scope\ScopeYamlLoader
-        arguments: ["@doctrine", "@glavweb_rest.security_access_handler"]
+    glavweb_rest.scope_fetcher_listener:
+        class: Glavweb\RestBundle\EventListener\ScopeFetcherListener
+        arguments: ["@glavweb_rest.scope_fetcher"]
+        tags:
+            - {name: kernel.event_listener, event: kernel.controller, method: onKernelController, priority: 5}
+
+    glavweb_rest.scope_reader:
+        class: Glavweb\RestBundle\Scope\ScopeReader
+        arguments: ["@annotation_reader"]
+
+    glavweb_rest.scope_fetcher:
+        class: Glavweb\RestBundle\Scope\ScopeFetcher
+        arguments: ["@glavweb_rest.scope_reader", "@security.authorization_checker", "@request_stack"]
+
 

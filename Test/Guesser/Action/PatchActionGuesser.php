@@ -1,20 +1,20 @@
 <?php
 
-namespace Glavweb\RestBundle\Determiner\Action;
-use Glavweb\RestBundle\Determiner\DeterminerHandler;
-use Glavweb\RestBundle\Determiner\ValueUtil;
+namespace Glavweb\RestBundle\Test\Guesser\Action;
+use Glavweb\RestBundle\Test\Guesser\GuesserHandler;
+use Glavweb\RestBundle\Test\Guesser\ValueUtil;
 use Symfony\Component\Form\FormTypeInterface;
 
 /**
- * Class PatchActionDeterminer
- * @package Glavweb\RestBundle\Determiner\Action
+ * Class PatchActionGuesser
+ * @package Glavweb\RestBundle\Test\Guesser\Action
  */
-class PatchActionDeterminer
+class PatchActionGuesser
 {
     /**
-     * @var DeterminerHandler
+     * @var GuesserHandler
      */
-    protected $determinerHandler;
+    protected $guesserHandler;
 
     /**
      * @var object
@@ -37,13 +37,13 @@ class PatchActionDeterminer
     protected $viewScope;
 
     /**
-     * PostActionDeterminer constructor.
+     * PostActionGuesser constructor.
      *
-     * @param DeterminerHandler $determinerHandler
+     * @param GuesserHandler $guesserHandler
      */
-    public function __construct(DeterminerHandler $determinerHandler)
+    public function __construct(GuesserHandler $guesserHandler)
     {
-        $this->determinerHandler = $determinerHandler;
+        $this->guesserHandler = $guesserHandler;
     }
 
     /**
@@ -83,9 +83,9 @@ class PatchActionDeterminer
     /**
      * @return array
      */
-    public function determineCases()
+    public function guessCases()
     {
-        $handler = $this->determinerHandler;
+        $handler = $this->guesserHandler;
         $formElements  = $handler->getFormElements($this->modelClass, $this->formType);
 
         $caseForTest = [];
@@ -129,7 +129,7 @@ class PatchActionDeterminer
      */
     private function getExpectedValue($fieldName, $fieldType, $value)
     {
-        $handler = $this->determinerHandler;
+        $handler = $this->guesserHandler;
         $associations     = $handler->getAssociations($this->modelClass);
         $serializerGroups = $handler->getSerializerGroups($this->modelClass);
 
@@ -162,7 +162,7 @@ class PatchActionDeterminer
      */
     private function getFieldType($fieldName)
     {
-        $handler = $this->determinerHandler;
+        $handler = $this->guesserHandler;
         $fields        = $handler->getFields($this->modelClass);
         $formElements  = $handler->getFormElements($this->modelClass, $this->formType);
 

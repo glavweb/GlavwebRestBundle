@@ -1,23 +1,23 @@
 <?php
 
-namespace Glavweb\RestBundle\Determiner\Action;
+namespace Glavweb\RestBundle\Test\Guesser\Action;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\ORM\UnitOfWork;
-use Glavweb\RestBundle\Determiner\DeterminerHandler;
+use Glavweb\RestBundle\Test\Guesser\GuesserHandler;
 use Nelmio\ApiDocBundle\Extractor\ApiDocExtractor;
 use Symfony\Bundle\FrameworkBundle\Routing\Router;
 
 /**
- * Class ViewActionDeterminer
- * @package Glavweb\RestBundle\Determiner\Action
+ * Class ViewActionGuesser
+ * @package Glavweb\RestBundle\Test\Guesser\Action
  */
-class ViewActionDeterminer extends AbstractViewActionDeterminer
+class ViewActionGuesser extends AbstractViewActionGuesser
 {
     /**
-     * @var DeterminerHandler
+     * @var GuesserHandler
      */
-    protected $determinerHandler;
+    protected $guesserHandler;
 
     /**
      * @var Registry
@@ -25,19 +25,19 @@ class ViewActionDeterminer extends AbstractViewActionDeterminer
     protected $doctrine;
 
     /**
-     * ViewActionDeterminer constructor.
+     * ViewActionGuesser constructor.
      *
-     * @param DeterminerHandler $determinerHandler
+     * @param GuesserHandler $guesserHandler
      * @param Registry $doctrine
      * @param Router $router
      * @param ApiDocExtractor $apiDocExtractor
      * @param string $scopeDir
      */
-    public function __construct(DeterminerHandler $determinerHandler, Registry $doctrine, Router $router, ApiDocExtractor $apiDocExtractor, $scopeDir)
+    public function __construct(GuesserHandler $guesserHandler, Registry $doctrine, Router $router, ApiDocExtractor $apiDocExtractor, $scopeDir)
     {
         parent::__construct($router, $apiDocExtractor, $scopeDir);
 
-        $this->determinerHandler = $determinerHandler;
+        $this->guesserHandler = $guesserHandler;
         $this->doctrine          = $doctrine;
     }
 
@@ -45,13 +45,13 @@ class ViewActionDeterminer extends AbstractViewActionDeterminer
      * @param string $scope
      * @return array
      */
-    public function determineExpected($scope)
+    public function guessExpected($scope)
     {
         /** @var UnitOfWork $uow */
         $uow = $this->doctrine->getManager()->getUnitOfWork();
         $values = $uow->getOriginalEntityData($this->model);
 
-        $handler = $this->determinerHandler;
+        $handler = $this->guesserHandler;
         $fields       = $handler->getFields($this->modelClass);
         $associations = $handler->getAssociations($this->modelClass);
         $scopeConfig  = $this->getScopeConfig($scope);

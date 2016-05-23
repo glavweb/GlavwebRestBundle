@@ -1,13 +1,18 @@
 <?php
 
-namespace Glavweb\RestBundle\Transformer;
+namespace Glavweb\RestBundle\Test\Transformer;
 
 /**
- * Class TestDataTransformer
+ * Class DataTransformer
  * @package Glavweb\RestBundle\Transformer
  */
-class TestDataTransformer
+class DataTransformer
 {
+    /**
+     * Modes
+     */
+    const MODE_CHECK_FIRST = 'check_first';
+
     /**
      * @var array
      */
@@ -91,8 +96,8 @@ class TestDataTransformer
     }
 
     /**
-     * @param string $expected
-     * @param string $actual
+     * @param array $expected
+     * @param array $actual
      * @return mixed
      */
     private function transformData(&$expected, &$actual)
