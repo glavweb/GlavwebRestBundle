@@ -98,7 +98,7 @@ class RestFormAction extends StandardAction
             $view->setSerializationContext($serializationContext);
         }
 
-        $form = $this->getFormFactory()->createNamed(null, $formType, $entity,
+        $form = $this->getFormFactory()->createNamed(null, get_class($formType), $entity,
             array_merge(
                 array('csrf_protection' => false),
                 $formOptions

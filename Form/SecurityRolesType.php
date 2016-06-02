@@ -4,9 +4,10 @@ namespace Glavweb\RestBundle\Form;
 
 use Glavweb\RestBundle\Security\EditableRolesBuilder;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\Form\FormView;
-use Symfony\Component\OptionsResolver\OptionsResolverInterface;
+use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\OptionsResolver\Options;
 
 /**
@@ -47,21 +48,21 @@ class SecurityRolesType extends AbstractType
     /**
      * {@inheritdoc}
      */
-    public function setDefaultOptions(OptionsResolverInterface $resolver)
+    public function configureOptions(OptionsResolver $resolver)
     {
         list($entityRoles, $securityRoles) = $this->rolesBuilder->getRoles();
 
         $resolver->setDefaults(array(
             'choices' => function (Options $options, $parentChoices) use ($entityRoles, $securityRoles) {
-                return empty($parentChoices) ? array_merge($entityRoles, $securityRoles) : array();
+                return empty($parentChoices) ? array_merge($entityRoles, $securityRoles) : [];
             },
 
             'entityRoles' => function (Options $options, $parentChoices) use ($entityRoles) {
-                return empty($parentChoices) ? $entityRoles : array();
+                return empty($parentChoices) ? $entityRoles : [];
             },
 
             'securityRoles' => function (Options $options, $parentChoices) use ($securityRoles) {
-                return empty($parentChoices) ? $securityRoles : array();
+                return empty($parentChoices) ? $securityRoles : [];
             },
 
             'data_class' => null
@@ -71,16 +72,16 @@ class SecurityRolesType extends AbstractType
     /**
      * {@inheritdoc}
      */
-    public function getParent()
+    public function getBlockPrefix()
     {
-        return 'choice';
+        return 'glavweb_security_roles';
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getName()
+    public function getParent()
     {
-        return 'glavweb_security_roles';
+        return ChoiceType::class;
     }
 }

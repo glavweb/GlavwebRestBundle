@@ -3,54 +3,55 @@
 {% block glavweb_security_roles_widget %}
     {% spaceless %}
         <div class="editable">
-
             {% set values = {} %}
             {%- for name, child in form %}
                 {%- set values = values|merge({(child.vars.value) : (name)}) %}
             {% endfor -%}
 
-            <h4>Permissions for entities</h4>
-            <table class="table">
-                <tr>
-                    <td></td>
-                    <td>Create</td>
-                    <td>List</td>
-                    <td>View</td>
-                    <td>Edit</td>
-                    <td>Delete</td>
-                    <td>Export</td>
-                </tr>
-
-                {% for entityName, roleChoices in entityRoles %}
-                    <tr><td colspan="7"><strong>{{ entityName }}</strong></td></tr>
-
-                    {% for roleName, roleData in roleChoices %}
-                        {% set roleName = roleData['name'] %}
-                        {% set choices  = roleData['roles'] %}
+            {% if entityRoles|length %}
+                <h4>Permissions for entities</h4>
+                <table class="table">
                     <tr>
-                        <td>&nbsp;&nbsp;&nbsp;&nbsp;{{ roleName }}</td>
-                        {% if roleName != 'Master' %}
-                            <td></td>
-                            <td></td>
-                        {% endif %}
-                        {% for value, name in choices %}
-                            <td title="{{ value }}">
-                                {% set child = form[values[value]] %}
-                                {{- form_widget(child) -}}
-                            </td>
-                        {% endfor %}
+                        <td></td>
+                        <td>Create</td>
+                        <td>List</td>
+                        <td>View</td>
+                        <td>Edit</td>
+                        <td>Delete</td>
+                        <td>Export</td>
                     </tr>
+
+                    {% for entityName, roleChoices in entityRoles %}
+                        <tr><td colspan="7"><strong>{{ entityName }}</strong></td></tr>
+
+                        {% for roleName, roleData in roleChoices %}
+                            {% set roleName = roleData['name'] %}
+                            {% set choices  = roleData['roles'] %}
+                        <tr>
+                            <td>&nbsp;&nbsp;&nbsp;&nbsp;{{ roleName }}</td>
+                            {% if roleName != 'Master' %}
+                                <td></td>
+                                <td></td>
+                            {% endif %}
+                            {% for name, value in choices %}
+                                <td title="{{ value }}">
+                                    {% set child = form[values[name]] %}
+                                    {{- form_widget(child) -}}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+
                     {% endfor %}
+                </table>
+            {% endif %}
 
-                {% endfor %}
-            </table>
-
-            <h4>Other roles</h4>
-            {% for value, name in securityRoles %}
+            <h4>Basic roles</h4>
+            {% for name, value in securityRoles %}
                 {% set child = form[values[value]] %}
 
                 <div>
-                    {{- form_widget(child) -}}&nbsp;&nbsp;
+                    {{- form_widget(child) -}}
                     {{- form_label(child, null, {translation_domain: choice_translation_domain}) -}}
                 </div>
             {% endfor %}
