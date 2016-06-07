@@ -17,33 +17,93 @@ class FileFaker
     private $kernel;
 
     /**
-     * @var string
-     */
-    private $kernelRootDir;
-
-    /**
      * FileFaker constructor.
      * @param KernelInterface $kernel
-     * @param string          $kernelRootDir
      */
-    public function __construct(KernelInterface $kernel, $kernelRootDir)
+    public function __construct(KernelInterface $kernel)
     {
-        $this->kernel        = $kernel;
-        $this->kernelRootDir = $kernelRootDir;
+        $this->kernel = $kernel;
     }
 
     /**
-     * @param int $width
-     * @param int $height
+     * @param string $fileName
+     * @param int    $width
+     * @param int    $height
      * @return UploadedFile
      */
-    public function getFakeUploadedImage($width = null, $height = null)
+    public function getFakeUploadedImageJpeg($fileName, $width = null, $height = null)
     {
-        $width  !== null ?: 64;
-        $height !== null ?: 64;
+        return $this->getFakeUploadedImage('jpeg', $fileName, $width, $height);
+    }
 
-        $filePath = Image::image($this->getCacheDir(), $width, $height, null);
-        $fileName = basename($filePath);
+    /**
+     * @param string $fileName
+     * @param int    $width
+     * @param int    $height
+     * @return UploadedFile
+     */
+    public function getFakeUploadedImageGif($fileName, $width = null, $height = null)
+    {
+        return $this->getFakeUploadedImage('gif', $fileName, $width, $height);
+    }
+
+    /**
+     * @param string $fileName
+     * @param int    $width
+     * @param int    $height
+     * @return UploadedFile
+     */
+    public function getFakeUploadedImagePng($fileName, $width = null, $height = null)
+    {
+        return $this->getFakeUploadedImage('png', $fileName, $width, $height);
+    }
+
+    /**
+     * @param string $type
+     * @param string $fileName
+     * @param int    $width
+     * @param int    $height
+     * @return UploadedFile
+     */
+    public function getFakeUploadedImage($type, $fileName, $width = null, $height = null)
+    {
+        $width  = $width  !== null ? $width : 64;
+        $height = $height !== null ? $height : 64;
+        $allowedTypes = ['jpeg', 'gif', 'png'];
+
+        if (!in_array($type, $allowedTypes)) {
+            throw new \RuntimeException(sprintf('Type %s is not allowed. Type must be one of: %s',
+                $type,
+                implode(', ', $allowedTypes)
+            ));
+        }
+
+        $filePath = $this->getCacheDir() . '/' . $fileName;
+
+        $resource = imagecreate($width, $height);
+
+        $result = false;
+        switch ($type) {
+            case 'jpeg':
+                $result = imagejpeg($resource, $filePath);
+
+                break;
+
+            case 'gif':
+                $result = imagejpeg($resource, $filePath);
+
+                break;
+
+            case 'png':
+                $result = imagejpeg($resource, $filePath);
+
+                break;
+        }
+
+        if (!$result) {
+            throw new \RuntimeException('Image did not created.');
+        }
+
         $file = new UploadedFile($filePath, $fileName);
 
         return $file;
@@ -53,9 +113,11 @@ class FileFaker
      * @param string $content
      * @return UploadedFile
      */
-    public function getFakeUploadedTxtFile($content = 'Some text')
+    public function getFakeUploadedTxtFile($content = null)
     {
-        $filePath    = $this->getCacheDir() . '/' . uniqid() . '.txt';
+        $content = $content !== null ? $content : 'Some text';
+
+        $filePath = $this->getCacheDir() . '/' . uniqid() . '.txt';
 
         $result = (bool)file_put_contents($filePath, $content);
         if (!$result) {
@@ -72,8 +134,10 @@ class FileFaker
      * @param string $contentInsideFile
      * @return UploadedFile
      */
-    public function getFakeUploadedPhpFile($contentInsideFile = 'PHP')
+    public function getFakeUploadedPhpFile($contentInsideFile = null)
     {
+        $contentInsideFile = $contentInsideFile !== null ? $contentInsideFile : 'PHP';
+
         $filePath = $this->getCacheDir() . '/' . uniqid() . '.php';
         $content  = '<?php echo "' . $contentInsideFile . '"; ';
 
@@ -93,9 +157,12 @@ class FileFaker
      */
     private function getCacheDir()
     {
-        $environment = $this->kernel->getEnvironment();
-        $rootDir     = $this->kernelRootDir;
+        $cacheDir = $this->kernel->getCacheDir() . '/' . 'faker';
 
-        return $rootDir . '/cache/' . $environment;
+        if (!is_dir($cacheDir)) {
+            mkdir($cacheDir);
+        }
+
+        return $cacheDir;
     }
 }

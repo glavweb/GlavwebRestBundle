@@ -9,11 +9,6 @@ namespace Glavweb\RestBundle\Test\Transformer;
 class DataTransformer
 {
     /**
-     * Modes
-     */
-    const MODE_CHECK_FIRST = 'check_first';
-
-    /**
      * @var array
      */
     private $expectedData;
@@ -22,11 +17,6 @@ class DataTransformer
      * @var array
      */
     private $actualData;
-
-    /**
-     * @var bool
-     */
-    private $modeCheckFirst;
 
     /**
      * @var bool
@@ -42,17 +32,6 @@ class DataTransformer
     {
         $this->expectedData = $expectedData;
         $this->actualData   = $actualData;
-    }
-
-    /**
-     * @param bool $modeCheckFirst
-     * @return $this
-     */
-    public function setModeCheckFirst($modeCheckFirst)
-    {
-        $this->modeCheckFirst = $modeCheckFirst;
-
-        return $this;
     }
 
     /**

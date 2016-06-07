@@ -7,31 +7,7 @@ services:
 
     glavweb_rest.file_faker:
         class: Glavweb\RestBundle\Faker\FileFaker
-        arguments: ["@kernel", "%kernel.root_dir%"]
-
-    glavweb_rest.test_guesser_handler:
-        class: Glavweb\RestBundle\Test\Guesser\GuesserHandler
-        arguments: ["@kernel", "@doctrine", "@form.factory", "@jms_serializer.metadata.doctrine_type_driver"]
-
-    glavweb_rest.create_action_guesser:
-        class: Glavweb\RestBundle\Test\Guesser\Action\CreateActionGuesser
-        arguments: ["@glavweb_rest.test_guesser_handler", "@glavweb_rest.file_faker"]
-
-    glavweb_rest.test.view_action_guesser:
-        class: Glavweb\RestBundle\Test\Guesser\Action\ViewActionGuesser
-        arguments: ["@glavweb_rest.test_guesser_handler", "@doctrine", "@router", "@nelmio_api_doc.extractor.api_doc_extractor", "%glavweb_datagrid.scope_dir%"]
-
-    glavweb_rest.test.list_action_guesser:
-        class: Glavweb\RestBundle\Test\Guesser\Action\ListActionGuesser
-        arguments: ["@router", "@nelmio_api_doc.extractor.api_doc_extractor", "%glavweb_datagrid.scope_dir%"]
-
-    glavweb_rest.update_action_guesser:
-        class: Glavweb\RestBundle\Test\Guesser\Action\UpdateActionGuesser
-        arguments: ["@glavweb_rest.test_guesser_handler"]
-
-    glavweb_rest.patch_action_guesser:
-        class: Glavweb\RestBundle\Test\Guesser\Action\PatchActionGuesser
-        arguments: ["@glavweb_rest.test_guesser_handler"]
+        arguments: ["@kernel"]
 
     # DataSchemaa
     glavweb_rest.api_doc.data_schema_parser:

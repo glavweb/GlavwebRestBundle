@@ -2,17 +2,16 @@
 
 namespace Glavweb\RestBundle\Test;
 
+use Doctrine\ORM\EntityRepository;
+use Glavweb\DatagridBundle\Loader\Yaml\ScopeYamlLoader;
+use Glavweb\RestBundle\Faker\FileFaker;
 use Glavweb\RestBundle\Test\Authenticate\AuthenticateResponse;
 use Glavweb\RestBundle\Test\Authenticate\AuthenticatorInterface;
-use Glavweb\RestBundle\Test\Guesser\Action\CreateActionGuesser;
-use Glavweb\RestBundle\Test\Guesser\Action\ListActionGuesser;
-use Glavweb\RestBundle\Test\Guesser\Action\PatchActionGuesser;
-use Glavweb\RestBundle\Test\Guesser\Action\UpdateActionGuesser;
-use Glavweb\RestBundle\Test\Guesser\Action\ViewActionGuesser;
 use Glavweb\RestBundle\Test\Transformer\DataTransformer;
+use Glavweb\RestBundle\Util\FileUtil;
 use Liip\FunctionalTestBundle\Test\WebTestCase;
 use Symfony\Bundle\FrameworkBundle\Client;
-use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Config\FileLocator;
 
 /**
  * Class RestTestCase
@@ -36,6 +35,11 @@ abstract class RestTestCase extends WebTestCase
     protected $client;
 
     /**
+     * @var FileFaker
+     */
+    protected $fileFaker;
+
+    /**
      * @var AuthenticateResponse
      */
     protected $authenticateResponse;
@@ -45,7 +49,8 @@ abstract class RestTestCase extends WebTestCase
      */
     public function setUp()
     {
-        $this->client = $this->createCurrentClient();
+        $this->client     = $this->createCurrentClient();
+        $this->fileFaker = $this->getContainer()->get('glavweb_rest.file_faker');
     }
 
     /**
@@ -65,7 +70,7 @@ abstract class RestTestCase extends WebTestCase
         $environment = $container->get('kernel')->getEnvironment();
         
         // @todo replace to bundle config
-        $httpHost    = $container->getParameter('http_host');
+        $httpHost = $container->getParameter('http_host');
 
         return static::createClient([
             'environment' => $environment,
@@ -275,248 +280,102 @@ abstract class RestTestCase extends WebTestCase
     }
 
     /**
-     * Asserts that two given JSON encoded objects or arrays are equal.
-     *
-     * @param string $expectedJson
-     * @param string $actualJson
+     * @param string $url
+     * @param array $queryParameters
+     * @return string
+     */
+    public function addQueryParametersToUrl($url, array $queryParameters)
+    {
+        if (!$queryParameters) {
+            return $url;
+        }
+
+        $urlParts = parse_url($url);
+        $query = isset($urlParts['query']) ? $urlParts['query'] : '';
+
+        $queryData = [];
+        if ($query) {
+            parse_str($query, $queryData);
+        }
+        $query = http_build_query(array_merge($queryData, $queryParameters));
+
+        return $urlParts['path'] . ($query ? '?' . $query : '');
+    }
+
+    /**
+     * @param string $class
+     * @return EntityRepository
+     */
+    protected function getRepository($class)
+    {
+        /** @var EntityRepository $repository */
+        $repository = $this->getContainer()->get('doctrine')->getManager()->getRepository($class);
+
+        return $repository;
+    }
+
+    /**
+     * @param string $scopePath
+     * @return array
+     */
+    public function getScopeConfig($scopePath)
+    {
+        $scopeDir = $this->getContainer()->getParameter('glavweb_datagrid.scope_dir');
+        $scopeLoader = new ScopeYamlLoader(new FileLocator($scopeDir));
+        $scopeLoader->load($scopePath);
+
+        return $scopeLoader->getConfiguration();
+    }
+
+    /**
+     * @param string $class
+     * @return object|null
+     */
+    protected function getLastEntity($class)
+    {
+        $repository = $this->getRepository($class);
+
+        return $repository->findOneBy([], ['id' => 'DESC']);
+    }
+
+    /**
+     * @param object $entity
+     * @param array $expectedData
+     * @param array $actualEntityData
+     * @return array
+     */
+    protected function getActualEntityData($entity, array $expectedData, array $actualEntityData = [])
+    {
+        foreach ($expectedData as $key => $value) {
+            $getter = 'get' . $key;
+            $entityValue = $entity->$getter();
+
+            if (is_array($value)) {
+                foreach ($entityValue as $subEntity) {
+                    $actualEntityData[$key] = $this->getActualEntityData($subEntity, $value, $actualEntityData);
+                }
+
+            } else {
+                $actualEntityData[$key] = $entityValue;
+            }
+        }
+
+        return $actualEntityData;
+    }
+
+    /**
+     * @param array  $actualData
+     * @param array  $expectedData
      * @param string $message
      */
-    public static function assertJsonStringEqualsJsonString($expectedJson, $actualJson, $message = '')
+    protected function assertDataContains(array $actualData, array $expectedData = [], $message = null)
     {
-        self::assertJson($expectedJson, $message);
-        self::assertJson($actualJson, $message);
+        $dataTransformer = new DataTransformer($expectedData, $actualData);
 
-        $expected = json_decode($expectedJson, true);
-        $actual   = json_decode($actualJson, true);
+        $expectedData = $dataTransformer->getExpectedData();
+        $actualData   = $dataTransformer->getActualData();
 
-        $dataTransformer = new DataTransformer($expected, $actual);
-        $expected = $dataTransformer->getExpectedData();
-        $actual   = $dataTransformer->getActualData();
-
-        self::assertEquals($expected, $actual, $message);
-    }
-
-    /**
-     * @param Response $response
-     * @param int $statusCode
-     * @param array $expectedData
-     * @param string $mode
-     * @param null $message
-     */
-    public function assertJsonResponse(Response $response, $statusCode = 200, array $expectedData = [], $mode = null, $message = null)
-    {
-        $actualJson = $response->getContent();
-
-        $this->assertEquals(
-            $statusCode,
-            $response->getStatusCode(),
-            $actualJson
-        );
-
-        $this->assertJson($actualJson, $actualJson);
-
-        $this->assertTrue(
-            $response->headers->contains('Content-Type', 'application/json'),
-            $response->headers
-        );
-
-        if ($expectedData) {
-            $actualData = json_decode($actualJson, true);
-
-            $dataTransformer = new DataTransformer($expectedData, $actualData);
-            if ($mode == DataTransformer::MODE_CHECK_FIRST) {
-                $dataTransformer->setModeCheckFirst(true);
-            }
-
-            $expectedData = $dataTransformer->getExpectedData();
-            $actualData   = $dataTransformer->getActualData();
-
-            if (!$message) {
-                $message = $actualJson;
-            }
-
-            $this->assertEquals($expectedData, $actualData, $message);
-        }
-    }
-
-    /**
-     * @param string $uri
-     * @param array $values
-     * @param array $files
-     * @param array $expected
-     * @param CreateActionGuesser $guesser
-     */
-    public function assertCreateRestAction($uri, array $values, array $files, array $expected, CreateActionGuesser $guesser = null)
-    {
-        $guessValues = [];
-        $guessFiles  = [];
-        if ($guesser) {
-            $guessValues = $guesser->guessValues();
-            $guessFiles  = $guesser->guessFiles();
-        }
-
-        $values = array_merge($guessValues, $values);
-        $files = array_merge($guessFiles, $files);
-
-        // Create
-        $client = $this->getClient();
-        $this->sendCreateRestRequest($uri, $values, $files);
-        $this->assertStatusCode(201, $client);
-
-        // Get
-        $apiViewUrl = $client->getResponse()->headers->get('Location');
-        $this->sendQueryRestRequest($apiViewUrl);
-
-        $guessExpected = [];
-        if ($guesser) {
-            $guessExpected = $guesser->guessExpected($values);
-        }
-        $expected = array_merge($guessExpected, $expected);
-
-        $this->assertJsonResponse($client->getResponse(), 200, $expected);
-    }
-
-    /**
-     * @param ViewActionGuesser $guesser
-     * @param array $additionalExpected
-     */
-    public function assertViewRestActionByGuesser(ViewActionGuesser $guesser, array $additionalExpected = [])
-    {
-        $client = $this->getClient();
-
-        $scopes = $guesser->getScopes();
-        foreach ($scopes as $scope) {
-            $this->sendQueryRestRequest($guesser->getUri(['_scope' => $scope]));
-            $this->assertStatusCode(200, $client);
-
-            // Test scope stricture
-            $scopeConfig = $guesser->getScopeConfig($scope);
-            $data = $this->getResponseData();
-
-            // assert scope structure
-            $this->assertDataStructure($data, $scopeConfig);
-
-            // assert data
-            $guessExpected = $guesser->guessExpected($scope);
-            $expected = array_merge($guessExpected, $additionalExpected);
-            $this->assertJsonResponse($client->getResponse(), 200, $expected);
-        }
-    }
-
-    /**
-     * @param ListActionGuesser $guesser
-     * @param array $additionalCases
-     */
-    public function assertListRestActionByGuesser(ListActionGuesser $guesser, array $additionalCases = [])
-    {
-        $client = $this->getClient();
-
-        // Test list output (list scope)
-        $scopes = $guesser->getScopes();
-        foreach ($scopes as $scope) {
-            $this->sendQueryRestRequest($guesser->getUri(['_scope' => $scope]));
-            $this->assertStatusCode(200, $client);
-
-            // Test scope stricture
-            $scopeConfig = $guesser->getScopeConfig($scope);
-            $data = $this->getResponseData();
-
-            if (!isset($data[0])) {
-                $this->assertTrue(false, 'Data not found.');
-            }
-
-            $this->assertDataStructure($data[0], $scopeConfig);
-        }
-
-        $guessCases = $guesser->guessCases();
-        $cases = array_merge($guessCases, $additionalCases);
-        $cases = array_filter($cases, function ($item) {
-            return (bool)$item;
-        });
-
-        // Test cases
-        $uri = $guesser->getUri();
-        foreach ($cases as $caseName => $case) {
-            $values   = $case['values'];
-            $expected = $case['expected'];
-
-            $this->sendQueryRestRequest($uri, $values);
-            $this->assertJsonResponse($client->getResponse(), 200, $expected, null, 'case: ' . $caseName);
-        }
-    }
-
-    /**
-     * @param string $uri
-     * @param array $values
-     * @param array $expected
-     * @param UpdateActionGuesser $guesser
-     */
-    public function assertUpdateRestAction($uri, array $values, array $expected = [], UpdateActionGuesser $guesser = null)
-    {
-        $guessValues = [];
-        if ($guesser) {
-            $guessValues = $guesser->guessValues();
-        }
-        $values = array_merge($guessValues, $values);
-
-        // Update
-        $client = $this->getClient();
-        $this->sendUpdateRestRequest($uri, $values);
-        $this->assertStatusCode(200, $client);
-
-        // Get
-        $this->sendQueryRestRequest($uri);
-
-        $guessExpected = [];
-        if ($guesser) {
-            $guessExpected = $guesser->guessExpected($values);
-        }
-        $expected = array_merge($guessExpected, $expected);
-
-        $this->assertJsonResponse($client->getResponse(), 200, $expected);
-    }
-
-    /**
-     * @param string $uri
-     * @param array $cases
-     * @param PatchActionGuesser $guesser
-     */
-    public function assertPatchRestAction($uri, array $cases, PatchActionGuesser $guesser = null)
-    {
-        $guessCases = [];
-        if ($guesser) {
-            $guessCases = $guesser->guessCases();
-        }
-
-        $cases = array_merge($guessCases, $cases);
-        $cases = array_filter($cases, function ($item) {
-            return (bool)$item;
-        });
-
-        // Test patch
-        $client = $this->getClient();
-
-        foreach ($cases as $case) {
-            $values   = $case['values'];
-            $expected = $case['expected'];
-            $this->sendPatchRestRequest($uri, $values);
-
-            $this->sendQueryRestRequest($uri);
-            $this->assertJsonResponse($client->getResponse(), 200, $expected);
-        }
-    }
-
-    /**
-     * @param string $uri
-     */
-    public function assertDeleteRestAction($uri)
-    {
-        $client = $this->getClient();
-        $this->sendDeleteRestRequest($uri);
-        $this->assertStatusCode(204, $client);
-
-        $this->sendQueryRestRequest($uri);
-        $this->assertStatusCode(404, $client);
+        $this->assertEquals($expectedData, $actualData, $message);
     }
 
     /**
@@ -526,7 +385,7 @@ abstract class RestTestCase extends WebTestCase
      */
     protected function assertDataStructure(array $data, array $scopeConfig)
     {
-        $diff = array_diff_key($scopeConfig, $data);
+        $diff = array_merge(array_diff_key($scopeConfig, $data), array_diff_key($data, $scopeConfig));
 
         if ($diff) {
             $this->assertTrue(false, sprintf('Result data have differences "%s" with scope config', implode(', ', array_keys($diff))));
@@ -554,5 +413,205 @@ abstract class RestTestCase extends WebTestCase
         }
 
         $this->assertTrue(true);
+    }
+
+    /**
+     * @param object $entity
+     * @param array  $expectedData
+     */
+    protected function assertEntity($entity, array $expectedData)
+    {
+        $actualEntityData = $this->getActualEntityData($entity, $expectedData);
+
+        $this->assertDataContains($actualEntityData, $expectedData);
+    }
+
+    /**
+     * @param string $entityClass
+     * @param string $entityId
+     * @param array $expectedData
+     */
+    protected function assertEntityFromDb($entityClass, $entityId, array $expectedData)
+    {
+        $doctrine = $this->getContainer()->get('doctrine');
+        $doctrine->getManager()->clear($entityClass);
+
+        $entity = $this->getRepository($entityClass)->find($entityId);
+
+        $this->assertTrue((bool)$entity);
+        $this->assertEntity($entity, $expectedData);
+    }
+
+    /**
+     * @param string $entityClass
+     * @param array $expectedData
+     */
+    protected function assertLastEntityFromDb($entityClass, array $expectedData)
+    {
+        $doctrine = $this->getContainer()->get('doctrine');
+        $doctrine->getManager()->clear($entityClass);
+
+        $entity = $this->getLastEntity($entityClass);
+
+        $this->assertTrue((bool)$entity);
+        $this->assertEntity($entity, $expectedData);
+    }
+
+    /**
+     * @param string $url
+     * @param string $expectedContentType
+     */
+    public function assertContentTypeFile($url, $expectedContentType)
+    {
+        $actualContentType = FileUtil::getFileContentType($this->getAbsoluteUri($url));
+        $this->assertEquals($expectedContentType, $actualContentType);
+    }
+
+    /**
+     * @param string $url
+     * @param array  $expectedData
+     * @param bool   $getFirst
+     */
+    public function restItemTestCase($url, array $expectedData = null, $getFirst = false)
+    {
+        $client = $this->getClient();
+
+        $this->sendQueryRestRequest($url);
+        $this->assertStatusCode(200, $client);
+
+        $actualData = $this->getResponseData();
+
+        if ($getFirst) {
+            if (!isset($actualData[0])) {
+                $this->assertTrue(false, 'First item not found.');
+            }
+
+            $actualData = $actualData[0];
+        }
+
+        $this->assertDataContains($actualData, $expectedData);
+    }
+
+    /**
+     * @param string $url
+     * @param array  $scopes
+     * @param bool   $getFirst
+     */
+    public function restScopeTestCase($url, array $scopes = [], $getFirst = false)
+    {
+        $client = $this->getClient();
+
+        foreach ($scopes as $scopeName => $scopeConfig) {
+            $this->sendQueryRestRequest($this->addQueryParametersToUrl($url, ['_scope' => $scopeName]));
+            $this->assertStatusCode(200, $client);
+
+            $actualData = $this->getResponseData();
+
+            if ($getFirst) {
+                if (!isset($actualData[0])) {
+                    $this->assertTrue(false, 'First item not found.');
+                }
+
+                $actualData = $actualData[0];
+            }
+
+            $this->assertDataStructure($actualData, $scopeConfig);
+        }
+    }
+
+    /**
+     * @param string $url
+     * @param array $cases
+     */
+    public function restListFilterTestCase($url, array $cases)
+    {
+        $client = $this->getClient();
+
+        $cases = array_filter($cases, function ($item) {
+            return (bool)$item;
+        });
+
+        foreach ($cases as $caseName => $case) {
+            $values   = $case['values'];
+            $expected = $case['expected'];
+
+            $this->sendQueryRestRequest($url, $values);
+
+            $this->assertStatusCode(200, $client);
+            $this->assertDataContains($data = $this->getResponseData(), $expected, 'case: ' . $caseName);
+        }
+    }
+
+    /**
+     * @param string $url
+     * @param string $entityClass
+     * @param string $entityId
+     */
+    protected function restDeleteTestCase($url, $entityClass, $entityId)
+    {
+        $client  = $this->getClient();
+
+        $this->sendDeleteRestRequest(rtrim($url, '/') . '/' .  $entityId);
+        $this->assertStatusCode(204, $client);
+
+        // Test in DB
+        $doctrine = $this->getContainer()->get('doctrine');
+        $doctrine->getManager()->clear($entityClass);
+
+        $this->assertTrue($this->getRepository($entityClass)->find($entityId) === null);
+    }
+
+    /**
+     * @param string $url
+     * @param array $cases
+     */
+    protected function restUploadFileTestCase($url, array $cases)
+    {
+        $fileFaker = $this->getContainer()->get('glavweb_rest.file_faker');
+
+        foreach ($cases as $case) {
+            if (!isset($case['type'])) {
+                throw new \RuntimeException('Type not found.');
+            }
+
+            if (!isset($case['status'])) {
+                throw new \RuntimeException('Status not found.');
+            }
+
+            $type           = $case['type'];
+            $expectedStatus = $case['status'];
+
+            switch ($type) {
+                case 'image':
+                    $fileName  = isset($case['fileName']) ? $case['fileName'] : 'jpeg';
+                    $imageType = isset($case['imageType']) ? $case['imageType'] : 'jpeg';
+                    $width     = isset($case['width']) ? $case['width'] : null;
+                    $height    = isset($case['height']) ? $case['height'] : null;
+                    $file = $fileFaker->getFakeUploadedImage($imageType, $fileName, $width, $height);
+
+                    break;
+
+                case 'php':
+                    $content = isset($case['content']) ? $case['content'] : '';
+                    $file = $fileFaker->getFakeUploadedPhpFile($content);
+
+                    break;
+
+                case 'txt':
+                    $content = isset($case['content']) ? $case['content'] : '';
+                    $file = $fileFaker->getFakeUploadedTxtFile($content);
+
+                    break;
+
+                default:
+                    throw new \RuntimeException(sprintf('Type %s must be "image, php or txt".', $type));
+            }
+
+            $this->sendCreateRestRequest($url, [], [
+                'file' => $file
+            ]);
+
+            $this->assertStatusCode($expectedStatus, $this->client);
+        }
     }
 }
