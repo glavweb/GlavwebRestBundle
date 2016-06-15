@@ -68,7 +68,7 @@ abstract class RestTestCase extends WebTestCase
     {
         $container   = $this->getContainer();
         $environment = $container->get('kernel')->getEnvironment();
-        
+
         // @todo replace to bundle config
         $httpHost = $container->getParameter('http_host');
 
@@ -231,8 +231,13 @@ abstract class RestTestCase extends WebTestCase
     public function sendRestRequest($method, $url, array $parameters, array $files = [])
     {
         $authenticateResponse = $this->authenticateResponse;
-        $authenticateParameters = $authenticateResponse->getParameters();
-        $authenticateHeaders    = $authenticateResponse->getHeaders();
+
+        $authenticateParameters = [];
+        $authenticateHeaders    = [];
+        if ($authenticateResponse) {
+            $authenticateParameters = $authenticateResponse->getParameters();
+            $authenticateHeaders    = $authenticateResponse->getHeaders();
+        }
 
         $this->client->request($method, $url,
             array_merge($authenticateParameters, $parameters),
@@ -630,13 +635,13 @@ abstract class RestTestCase extends WebTestCase
             ]);
 
             $this->assertStatusCode($expectedStatus, $this->client);
-            
+
             // After callback
             if (isset($case['after'])) {
                 if (!is_callable($case['after'])) {
                     throw new \RuntimeException('Attribute "after" must be callable.');
                 }
-                
+
                 call_user_func($case['after']);
             }
         }
