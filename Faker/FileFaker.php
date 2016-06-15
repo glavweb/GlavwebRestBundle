@@ -1,7 +1,7 @@
 <?php
 
 namespace Glavweb\RestBundle\Faker;
-use Faker\Provider\Image;
+
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpKernel\KernelInterface;
 
@@ -15,6 +15,74 @@ class FileFaker
      * @var KernelInterface
      */
     private $kernel;
+
+
+    /**
+     * @param string $type
+     * @param string $filePath
+     * @param int    $width
+     * @param int    $height
+     * @return bool
+     */
+    public static function fakeImage($type, $filePath, $width = null, $height = null)
+    {
+        $width  = $width  !== null ? $width : 64;
+        $height = $height !== null ? $height : 64;
+        $allowedTypes = ['jpeg', 'gif', 'png'];
+
+        if (!in_array($type, $allowedTypes)) {
+            throw new \RuntimeException(sprintf('Type %s is not allowed. Type must be one of: %s',
+                $type,
+                implode(', ', $allowedTypes)
+            ));
+        }
+
+        $resource = imagecreate($width, $height);
+
+        $result = false;
+        switch ($type) {
+            case 'jpeg':
+                $result = imagejpeg($resource, $filePath);
+
+                break;
+
+            case 'gif':
+                $result = imagejpeg($resource, $filePath);
+
+                break;
+
+            case 'png':
+                $result = imagejpeg($resource, $filePath);
+
+                break;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param string $filePath
+     * @param string $content
+     * @return bool
+     */
+    public static function fakePhpFile($filePath, $content = null)
+    {
+        $content = $content !== null ? $content : 'PHP';
+
+        return (bool)file_put_contents($filePath, '<?php echo "' . $content . '"; ');
+    }
+
+    /**
+     * @param string $filePath
+     * @param string $content
+     * @return bool
+     */
+    public function fakeTxtFile($filePath, $content = null)
+    {
+        $content = $content !== null ? $content : 'Some text';
+
+        return (bool)file_put_contents($filePath, $content);
+    }
 
     /**
      * FileFaker constructor.
@@ -67,39 +135,9 @@ class FileFaker
      */
     public function getFakeUploadedImage($type, $fileName, $width = null, $height = null)
     {
-        $width  = $width  !== null ? $width : 64;
-        $height = $height !== null ? $height : 64;
-        $allowedTypes = ['jpeg', 'gif', 'png'];
-
-        if (!in_array($type, $allowedTypes)) {
-            throw new \RuntimeException(sprintf('Type %s is not allowed. Type must be one of: %s',
-                $type,
-                implode(', ', $allowedTypes)
-            ));
-        }
-
         $filePath = $this->getCacheDir() . '/' . $fileName;
 
-        $resource = imagecreate($width, $height);
-
-        $result = false;
-        switch ($type) {
-            case 'jpeg':
-                $result = imagejpeg($resource, $filePath);
-
-                break;
-
-            case 'gif':
-                $result = imagejpeg($resource, $filePath);
-
-                break;
-
-            case 'png':
-                $result = imagejpeg($resource, $filePath);
-
-                break;
-        }
-
+        $result = self::fakeImage($type, $filePath, $width, $height);
         if (!$result) {
             throw new \RuntimeException('Image did not created.');
         }
@@ -115,11 +153,9 @@ class FileFaker
      */
     public function getFakeUploadedTxtFile($content = null)
     {
-        $content = $content !== null ? $content : 'Some text';
-
         $filePath = $this->getCacheDir() . '/' . uniqid() . '.txt';
 
-        $result = (bool)file_put_contents($filePath, $content);
+        $result = self::fakeTxtFile($filePath, $content);
         if (!$result) {
             throw new \RuntimeException("Can't create file: $filePath.");
         }
@@ -131,17 +167,15 @@ class FileFaker
     }
 
     /**
-     * @param string $contentInsideFile
+     * @param string $content
      * @return UploadedFile
      */
-    public function getFakeUploadedPhpFile($contentInsideFile = null)
+    public function getFakeUploadedPhpFile($content = null)
     {
-        $contentInsideFile = $contentInsideFile !== null ? $contentInsideFile : 'PHP';
-
         $filePath = $this->getCacheDir() . '/' . uniqid() . '.php';
-        $content  = '<?php echo "' . $contentInsideFile . '"; ';
 
-        $result = (bool)file_put_contents($filePath, $content);
+        $result = self::fakePhpFile($filePath, $content);
+
         if (!$result) {
             throw new \RuntimeException("Can't create file: $filePath.");
         }

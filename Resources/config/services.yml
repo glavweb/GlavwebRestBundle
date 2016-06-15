@@ -30,3 +30,9 @@ services:
     glavweb_rest.scope_fetcher:
         class: Glavweb\RestBundle\Scope\ScopeFetcher
         arguments: ["@glavweb_rest.scope_reader", "@security.authorization_checker", "@request_stack"]
+
+    # Faker
+    glavweb_rest.faker_provider:
+        class: Glavweb\RestBundle\DataFixtures\Faker\Provider
+        tags:
+            - {name: hautelook_alice.faker.provider}
