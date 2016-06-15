@@ -91,6 +91,21 @@ abstract class RestTestCase extends WebTestCase
         $cacheKey = md5(implode('__' , $fixtureFiles) . '__' . (int)$append) . '__' . $additionalCacheKey;
         if (!isset(self::$fixtureObjectsCache[$cacheKey])) {
             self::$fixtureObjectsCache[$cacheKey] = $this->loadFixtureFiles($fixtureFiles, $append, $omName, $registryName);
+
+        } else {
+            // Refresh objects
+            $doctrine = $this->getContainer()->get('doctrine');
+            $clearClasses = [];
+            foreach (self::$fixtureObjectsCache[$cacheKey] as $objectName => $object) {
+                $class = get_class($object);
+
+                if (!isset($clearClasses[$class])) {
+                    $doctrine->getManager()->clear($class);
+                    $clearClasses[$class] = true;
+                }
+
+                self::$fixtureObjectsCache[$cacheKey][$objectName] = $this->getRepository($class)->find($object->getId());
+            }
         }
 
         return self::$fixtureObjectsCache[$cacheKey];
@@ -350,7 +365,10 @@ abstract class RestTestCase extends WebTestCase
             $getter = 'get' . $key;
             $entityValue = $entity->$getter();
 
-            if (is_array($value)) {
+            if (is_object($entityValue) && method_exists($entityValue, 'getId')) {
+                $actualEntityData[$key] = $entityValue->getId();
+
+            } elseif (is_array($value)) {
                 foreach ($entityValue as $subEntity) {
                     $actualEntityData[$key] = $this->getActualEntityData($subEntity, $value, $actualEntityData);
                 }
@@ -612,6 +630,15 @@ abstract class RestTestCase extends WebTestCase
             ]);
 
             $this->assertStatusCode($expectedStatus, $this->client);
+            
+            // After callback
+            if (isset($case['after'])) {
+                if (!is_callable($case['after'])) {
+                    throw new \RuntimeException('Attribute "after" must be callable.');
+                }
+                
+                call_user_func($case['after']);
+            }
         }
     }
 }
