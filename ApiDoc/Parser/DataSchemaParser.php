@@ -82,7 +82,7 @@ class DataSchemaParser implements ParserInterface
 
     /**
      * @param array$info
-     * @return arra y
+     * @return array
      */
     public function getItemMetaData(array $info)
     {
