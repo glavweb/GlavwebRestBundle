@@ -52,15 +52,29 @@ class GlavwebRestController extends FOSRestController
     protected function setContentRangeHeader(View $view, $offset, $limit, $total)
     {
         $offset = (int)$offset;
-        $limit  = (int)$limit;
         $total  = (int)$total;
 
-        if ($limit > 0 && $total > 0 && $offset < $total && $total > $limit) {
-            $end = $offset + $limit;
-            $end = $end > $total ? $total : $end;
-            
-            $view->setStatusCode(Response::HTTP_PARTIAL_CONTENT);
+        $needRange = $limit >= 0 || $offset >= 0;
+        if ($needRange) {
+            if ($limit === null) {
+                $end = $total - 1;
+
+            } else {
+                $end = $offset + $limit - 1;
+                $end = min($end, $total - 1);
+            }
+
+            if ($limit !== null && (int)$limit === 0) {
+                $offset = '';
+                $end    = '';
+            }
+
             $view->setHeader('Content-Range', "items $offset-$end/$total");
+        }
+
+        $needPartialContentStatus = $offset > 0 || ($limit !== null && $total > $limit);
+        if ($needPartialContentStatus) {
+            $view->setStatusCode(Response::HTTP_PARTIAL_CONTENT);
         }
     }
 
