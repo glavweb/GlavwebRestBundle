@@ -47,12 +47,12 @@ class FileFaker
                 break;
 
             case 'gif':
-                $result = imagejpeg($resource, $filePath);
+                $result = imagegif($resource, $filePath);
 
                 break;
 
             case 'png':
-                $result = imagejpeg($resource, $filePath);
+                $result = imagepng($resource, $filePath);
 
                 break;
         }
