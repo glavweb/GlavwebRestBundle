@@ -12,6 +12,7 @@
 namespace Glavweb\RestBundle\Scope;
 
 use Doctrine\Common\Util\ClassUtils;
+use Glavweb\RestBundle\Exception\InvalidScopeNameException;
 use Glavweb\RestBundle\Mapping\Annotation\Scope;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -83,6 +84,7 @@ class ScopeFetcher implements ScopeFetcherInterface
                 return $this->getFirstAvailable($annotations, $default);
             }
 
+            $this->checkScopeName($annotations, $requestName);
             $isCheckName = true;
             $firstGrantedAnnotation = null;
             foreach ($annotations as $annotation) {
@@ -106,7 +108,7 @@ class ScopeFetcher implements ScopeFetcherInterface
                 $firstGrantedAnnotation->getPath();
             }
         }
-        
+
         return $default;
     }
 
@@ -168,13 +170,13 @@ class ScopeFetcher implements ScopeFetcherInterface
             if (!$this->controller) {
                 throw new \InvalidArgumentException('Controller and method needs to be set via setController');
             }
-    
+
             if (!is_array($this->controller) || empty($this->controller[0]) || !is_object($this->controller[0])) {
                 throw new \InvalidArgumentException(
                     'Controller needs to be set as a class instance (closures/functions are not supported)'
                 );
             }
-    
+
             $this->scopeAnnotations = $this->scopeReader->read(
                 new \ReflectionClass(ClassUtils::getClass($this->controller[0])),
                 $this->controller[1]
@@ -198,5 +200,17 @@ class ScopeFetcher implements ScopeFetcherInterface
         }
 
         return $default;
+    }
+
+    /**
+     * @param array $annotations
+     * @param string $scopeName
+     * @throws InvalidScopeNameException If Scope name is not defined
+     */
+    private function checkScopeName(array $annotations, $scopeName)
+    {
+        if (!isset($annotations[$scopeName])) {
+            throw new InvalidScopeNameException(sprintf('Scope name "%s" is not defined.', $scopeName));
+        }
     }
 }
