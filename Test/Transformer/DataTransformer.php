@@ -90,7 +90,7 @@ class DataTransformer
                 continue;
             }
 
-            if ($value == '{ignore}') {
+            if ($value === '{ignore}') {
                 if (isset($actual[$key])) {
                     unset($expected[$key]);
                     unset($actual[$key]);
@@ -99,7 +99,7 @@ class DataTransformer
                 continue;
             }
 
-            if ($value == '{string}') {
+            if ($value === '{string}') {
                 $checkActualValue = isset($actual[$key]) && is_string($actual[$key]);
                 if ($checkActualValue) {
                     unset($expected[$key]);
@@ -109,7 +109,7 @@ class DataTransformer
                 continue;
             }
 
-            if ($value == '{integer}') {
+            if ($value === '{integer}') {
                 $checkActualValue = isset($actual[$key]) && is_numeric($actual[$key]);
                 if ($checkActualValue) {
                     unset($expected[$key]);
@@ -119,7 +119,7 @@ class DataTransformer
                 continue;
             }
 
-            if ($value == '{array}') {
+            if ($value === '{array}') {
                 $checkActualValue = isset($actual[$key]) && is_array($actual[$key]);
                 if ($checkActualValue) {
                     unset($expected[$key]);
@@ -129,7 +129,7 @@ class DataTransformer
                 continue;
             }
 
-            if ($value == '{date}') {
+            if ($value === '{date}') {
                 $checkActualValue = isset($actual[$key]) && !empty($actual[$key]) && new \DateTime($actual[$key]);
 
                 if ($checkActualValue) {
